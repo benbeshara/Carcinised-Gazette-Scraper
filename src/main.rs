@@ -6,6 +6,8 @@ use select::predicate::Name;
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
 use tokio::task::JoinError;
 
+type GenericError = Box<dyn Error + Send + Sync + 'static>;
+
 #[derive(Debug, Default)]
 #[allow(dead_code)]
 struct Gazette {
@@ -42,14 +44,14 @@ async fn main() {
     }
 }
 
-fn get_redis_connection() -> Result<Connection, Box<dyn Error + Send + Sync + 'static>> {
+fn get_redis_connection() -> Result<Connection, GenericError> {
     let redis = redis::Client::open("redis://localhost/")?;
     let redis_client = redis.get_connection()?;
 
     Ok(redis_client)
 }
 
-async fn update_pdfs() -> Result<Vec<std::string::String>, Box<dyn Error + Send + Sync + 'static>> {
+async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
     let url = "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm";
     let base_uri = "http://www.gazette.vic.gov.au";
     parse_webpage(url, base_uri).await
@@ -61,7 +63,7 @@ async fn make_hash(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-async fn entry_is_in_redis(entry: String) -> Result<bool, Box<dyn Error + Send + Sync + 'static>> {
+async fn entry_is_in_redis(entry: String) -> Result<bool, GenericError> {
     let mut redis_client = get_redis_connection()?;
 
     Ok(redis_client
@@ -78,11 +80,7 @@ async fn entry_is_in_redis(entry: String) -> Result<bool, Box<dyn Error + Send +
             != 0)
 }
 
-async fn push_to_redis(
-    uri: &str,
-    title: &str,
-    condition: &str,
-) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+async fn push_to_redis(uri: &str, title: &str, condition: &str) -> Result<(), GenericError> {
     let hash = make_hash(uri).await;
     let mut redis_client = get_redis_connection()?;
 
@@ -96,10 +94,7 @@ async fn push_to_redis(
     Ok(())
 }
 
-async fn parse_webpage(
-    uri: &str,
-    base_uri: &str,
-) -> Result<Vec<String>, Box<dyn Error + Send + Sync + 'static>> {
+async fn parse_webpage(uri: &str, base_uri: &str) -> Result<Vec<String>, GenericError> {
     let res = reqwest::get(uri).await?.text().await?;
 
     let pdf_list: Vec<(String, String)> = Document::from(res.as_str())
@@ -120,9 +115,7 @@ async fn parse_webpage(
 }
 
 #[allow(unused_must_use)]
-async fn filter_gazettes(
-    uri_list: Vec<(String, String)>,
-) -> Result<Vec<String>, Box<dyn Error + Send + Sync + 'static>> {
+async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>, GenericError> {
     let uri_list = uri_list.clone();
     let tasks: Vec<_> = uri_list
         .into_iter()
@@ -170,8 +163,7 @@ async fn filter_gazettes(
     Ok(res)
 }
 
-async fn retrieve_gazettes_from_redis(
-) -> Result<Vec<Gazette>, Box<dyn Error + Send + Sync + 'static>> {
+async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError> {
     let mut redis_client = get_redis_connection()?;
 
     let mut gazettes: Vec<Gazette> = vec![];
