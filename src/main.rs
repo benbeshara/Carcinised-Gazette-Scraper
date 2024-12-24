@@ -1,3 +1,5 @@
+mod web;
+
 use std::{collections::HashMap, error::Error};
 
 use redis::{from_redis_value, Commands, Connection, ErrorKind, FromRedisValue, RedisError};
@@ -8,9 +10,9 @@ use tokio::task::JoinError;
 
 type GenericError = Box<dyn Error + Send + Sync + 'static>;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
-struct Gazette {
+pub struct Gazette {
     title: std::string::String,
     uri: std::string::String,
 }
@@ -38,10 +40,11 @@ async fn main() {
         Ok(_) => println!("PDF Update succeeded"),
         Err(e) => println!("PDF Update failed: {:?}", e.to_string()),
     }
-    match retrieve_gazettes_from_redis().await {
-        Ok(_) => println!("Gazettes retrieved from redis"),
-        Err(e) => println!("Gazette retrieval failed: {:?}", e.to_string()),
-    }
+    // match retrieve_gazettes_from_redis().await {
+    //     Ok(_) => println!("Gazettes retrieved from redis"),
+    //     Err(e) => println!("Gazette retrieval failed: {:?}", e.to_string()),
+    // }
+    crate::web::start_server().await;
 }
 
 fn get_redis_connection() -> Result<Connection, GenericError> {
@@ -51,7 +54,7 @@ fn get_redis_connection() -> Result<Connection, GenericError> {
     Ok(redis_client)
 }
 
-async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
+pub async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
     let url = "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm";
     let base_uri = "http://www.gazette.vic.gov.au";
     parse_webpage(url, base_uri).await
@@ -163,7 +166,7 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
     Ok(res)
 }
 
-async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError> {
+pub async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError> {
     let mut redis_client = get_redis_connection()?;
 
     let mut gazettes: Vec<Gazette> = vec![];
@@ -177,7 +180,7 @@ async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError> {
         }
     }
 
-    println!("{:?}", gazettes);
+    gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));
 
     Ok(gazettes)
 }
