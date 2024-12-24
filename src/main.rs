@@ -36,14 +36,8 @@ impl FromRedisValue for Gazette {
 
 #[tokio::main]
 async fn main() {
-    match update_pdfs().await {
-        Ok(_) => println!("PDF Update succeeded"),
-        Err(e) => println!("PDF Update failed: {:?}", e.to_string()),
-    }
-    // match retrieve_gazettes_from_redis().await {
-    //     Ok(_) => println!("Gazettes retrieved from redis"),
-    //     Err(e) => println!("Gazette retrieval failed: {:?}", e.to_string()),
-    // }
+    tokio::spawn(async move {update_pdfs().await});
+
     crate::web::start_server().await;
 }
 
@@ -62,7 +56,11 @@ fn get_redis_connection() -> Result<Connection, GenericError> {
 pub async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
     let url = "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm";
     let base_uri = "http://www.gazette.vic.gov.au";
-    parse_webpage(url, base_uri).await
+
+    match parse_webpage(url, base_uri).await {
+        Ok(_) => println!("PDF Update succeeded"),
+        Err(e) => println!("PDF Update failed: {:?}", e.to_string()),
+    }
 }
 
 async fn make_hash(key: &str) -> String {
