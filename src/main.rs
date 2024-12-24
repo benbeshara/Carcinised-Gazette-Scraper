@@ -117,7 +117,6 @@ async fn parse_webpage(uri: &str, base_uri: &str) -> Result<Vec<String>, Generic
     pdf_list.await
 }
 
-#[allow(unused_must_use)]
 async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>, GenericError> {
     let uri_list = uri_list.clone();
     let tasks: Vec<_> = uri_list
@@ -140,10 +139,10 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
                             let page_zero: u32 = 1;
                             if let Ok(page_text) = pdf.extract_text(&[page_zero]) {
                                 if page_text.contains("Control of Weapons Act 1990") {
-                                    push_to_redis(&uri, &title, "flagged").await;
+                                    let _ = push_to_redis(&uri, &title, "flagged").await;
                                     return Some(uri);
                                 } else {
-                                    push_to_redis(&uri, "", "discarded").await;
+                                    let _ = push_to_redis(&uri, "", "discarded").await;
                                 }
                             }
                         }
