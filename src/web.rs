@@ -89,7 +89,7 @@ async fn landing() -> Markup {
                         }
 
                     }
-                    a class="attribution" href="https://github.com/benbeshara/Control-of-Weapons-Gazette-Scraper" target="_blank" {
+                    a class="attribution" href="https://github.com/benbeshara/Carcinised-Gazette-Scraper" target="_blank" {
                         "Source available here under the permissive AGPL-3.0 license"
                     }
                 }
