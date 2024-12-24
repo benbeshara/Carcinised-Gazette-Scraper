@@ -115,11 +115,11 @@ async fn parse_webpage(uri: &str, base_uri: &str) -> Result<(), GenericError> {
         .filter(|n| n.1.contains(".pdf"))
         .collect();
 
-    let chunks = pdf_list.chunks(16);
+    let chunks = pdf_list.chunks(32);
 
-    chunks.for_each(|chunk| {
-        let _ = filter_gazettes(chunk.to_vec());
-    });
+    for chunk in chunks {
+        let _ = filter_gazettes(chunk.to_vec()).await;
+    };
 
     Ok(())
 }
