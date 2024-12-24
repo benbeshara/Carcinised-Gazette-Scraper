@@ -53,7 +53,7 @@ fn get_redis_connection() -> Result<Connection, GenericError> {
     Ok(redis_client)
 }
 
-pub async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
+pub async fn update_pdfs() -> Result<(), GenericError> {
     let url = "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm";
     let base_uri = "http://www.gazette.vic.gov.au";
 
@@ -100,7 +100,7 @@ async fn push_to_redis(uri: &str, title: &str, condition: &str) -> Result<(), Ge
     Ok(())
 }
 
-async fn parse_webpage(uri: &str, base_uri: &str) -> Result<Vec<String>, GenericError> {
+async fn parse_webpage(uri: &str, base_uri: &str) -> Result<(), GenericError> {
     let res = reqwest::get(uri).await?.text().await?;
 
     let pdf_list: Vec<(String, String)> = Document::from(res.as_str())
@@ -115,9 +115,13 @@ async fn parse_webpage(uri: &str, base_uri: &str) -> Result<Vec<String>, Generic
         .filter(|n| n.1.contains(".pdf"))
         .collect();
 
-    let pdf_list = filter_gazettes(pdf_list);
+    let chunks = pdf_list.chunks(16);
 
-    pdf_list.await
+    chunks.for_each(|chunk| {
+        let _ = filter_gazettes(chunk.to_vec());
+    });
+
+    Ok(())
 }
 
 async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>, GenericError> {
