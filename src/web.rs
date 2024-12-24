@@ -1,6 +1,7 @@
 use futures::stream::{self, Stream};
 use tokio_stream::StreamExt as _;
 use std::{convert::Infallible, time::Duration};
+use std::net::SocketAddr;
 use axum::{self, routing::get, Router, response::sse::{Sse, Event}};
 use maud::{html, Markup};
 use crate::update_pdfs;
@@ -9,7 +10,15 @@ pub async fn start_server() {
     let app = Router::new()
         .route("/", get(landing))
         .route("/data", get(list_sse));
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
+
+    let port: u16 = std::env::var("PORT")
+        .unwrap_or_else(|_| "3000".to_string()) // Get the port as a string or default to "3000"
+        .parse() // Parse the port string into a u16
+        .expect("Failed to parse PORT");
+
+    let address = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], port));
+
+    let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
     axum::serve(listener, app).await.unwrap();
 }
 
