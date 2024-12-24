@@ -58,8 +58,8 @@ pub async fn update_pdfs() -> Result<Vec<std::string::String>, GenericError> {
     let base_uri = "http://www.gazette.vic.gov.au";
 
     match parse_webpage(url, base_uri).await {
-        Ok(_) => println!("PDF Update succeeded"),
-        Err(e) => println!("PDF Update failed: {:?}", e.to_string()),
+        Ok(res) => {println!("PDF Update succeeded"); Ok(res)},
+        Err(e) => {println!("PDF Update failed: {:?}", e.to_string()); Err(e)},
     }
 }
 
