@@ -49,10 +49,11 @@ async fn main() {
 
 fn get_redis_connection() -> Result<Connection, GenericError> {
     let redis_url: String = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost/".to_string()) // Get the port as a string or default to "3000"
+        .unwrap_or_else(|_| "redis://localhost:6379".to_string()) // Get the port as a string or default to "3000"
         .parse() // Parse the port string into a u16
         .expect("Failed to get REDIS_URL");
-    let redis = redis::Client::open(redis_url)?;
+    let redis_url_insecure = redis_url + "#insecure";
+    let redis = redis::Client::open(redis_url_insecure)?;
     let redis_client = redis.get_connection()?;
 
     Ok(redis_client)

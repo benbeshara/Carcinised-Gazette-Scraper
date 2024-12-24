@@ -4,15 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7.5"
-axum-htmx = "0.6.0"
-futures = "0.3.30"
+axum = "0.7.9"
+futures = "0.3.31"
 lopdf = "0.34.0"
 maud = { version = "0.26.0", features = ["axum"] }
-pdf-extract = "0.7.9"
-redis = "0.26.1"
-reqwest = "0.12.7"
+redis = {  version = "0.27.6", features = ["cluster", "tokio-native-tls-comp"] }
+reqwest = "0.12.9"
 select = "0.6.0"
 sha1 = "0.10.6"
-tokio = { version = "1.40.0", features = ["full"] }
+tokio = { version = "1.42.0", features = ["full"] }
 tokio-stream = "0.1.17"
