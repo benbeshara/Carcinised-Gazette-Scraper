@@ -3,7 +3,7 @@ use tokio_stream::StreamExt as _;
 use std::{convert::Infallible, time::Duration};
 use std::net::SocketAddr;
 use axum::{self, routing::get, Router, response::sse::{Sse, Event}};
-use maud::{html, Markup};
+use maud::{html, Markup, PreEscaped};
 use crate::update_pdfs;
 
 pub async fn start_server() {
@@ -33,11 +33,17 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
 }
 
 async fn send_data() -> String {
-    match update_pdfs().await {
-        Ok(_) => println!("PDF Update succeeded"),
-        Err(e) => println!("PDF Update failed: {:?}", e.to_string()),
-    }
+    tokio::spawn(async move {update_pdfs().await});
+    format!("<ul>{}</ul>", render_list().await)
+}
 
+async fn initial_list() -> Markup {
+    html! {
+        (PreEscaped(render_list().await))
+    }
+}
+
+async fn render_list() -> String {
     if let Ok(gazettes) = crate::retrieve_gazettes_from_redis().await {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
             acc += html!(
@@ -81,13 +87,13 @@ async fn landing() -> Markup {
                     span.subheading {
                         "Gazettes sourced from the Victorian Gazette website"
                     }
-                    ul {
-                        li hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
+                    ul hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
                             span hx-swap="innerHTML" sse-swap="heartbeat" {
-                                "Loading (If there's a lot of new gazettes, this could take some time)"
+                        li  {
+                                "Refreshing... (If there's a lot of new gazettes, this could take some time)"
                             }
                         }
-
+                        ((initial_list().await))
                     }
                     a class="attribution" href="https://github.com/benbeshara/Carcinised-Gazette-Scraper" target="_blank" {
                         "Source available here under the permissive AGPL-3.0 license"
