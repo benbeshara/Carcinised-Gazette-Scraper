@@ -59,8 +59,10 @@ async fn render_list() -> String {
                         }
                     }
                     div.thumbnail {
-                        a href=(gz.img_uri) target="_blank" {
-                            img src=(gz.img_uri) {}
+                        @if gz.img_uri != "Image upload failed" {
+                            a href=(gz.img_uri) target="_blank" {
+                                img src=(gz.img_uri) {}
+                            }
                         }
                     }
                 }
@@ -163,6 +165,10 @@ fn stylesheet() -> Markup {
             li div {
                 flex-shrink: 3;
             }
+            li div.thumbnail {
+                height: 128px;
+                width: 128px;
+            }
             li div.thumbnail a img {
                 height: 128px;
                 width: 128px
@@ -198,6 +204,10 @@ fn stylesheet() -> Markup {
                     background-color: #336;
                     display: block;
                     text-align: justify;
+                }
+                li div.thumbnail {
+                    height: 96px;
+                    width: 100%;
                 }
                 li div.thumbnail a img {
                     height: 96px;
