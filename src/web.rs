@@ -48,12 +48,18 @@ async fn render_list() -> String {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
             acc += html!(
                 li {
-                    span {
-                        a href=(gz.uri) target="_blank" {
-                            (gz.title)
-                            span.uri {
-                                (gz.uri)
+                    div {
+                        span {
+                            a href=(gz.uri) target="_blank" {
+                                (gz.title)
+                                span.uri {
+                                    (gz.uri)
+                                }
                             }
+                        }
+                    }
+                    div.thumbnail {
+                        a href=(gz.img_uri) target="_blank" {
                             img src=(gz.img_uri) {}
                         }
                     }
@@ -149,6 +155,17 @@ fn stylesheet() -> Markup {
             li {
                 padding: 0.5em 1rem;
                 margin: 0 -1rem;
+                display: flex;
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+            li div {
+                flex-shrink: 3;
+            }
+            li div.thumbnail a img {
+                height: 128px;
+                width: 128px
             }
             li:hover {
                 background-color: #447;
@@ -179,6 +196,12 @@ fn stylesheet() -> Markup {
                     padding: 1rem;
                     margin: 0;
                     background-color: #336;
+                    display: block;
+                    text-align: justify;
+                }
+                li div.thumbnail a img {
+                    height: 96px;
+                    width: 100%;
                 }
                 .attribution {
                     font-size: 0.8rem;
