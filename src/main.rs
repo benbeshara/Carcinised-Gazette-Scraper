@@ -7,6 +7,7 @@ use select::document::Document;
 use select::predicate::Name;
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
 use tokio::task::JoinError;
+use imgurs::ImgurClient;
 
 type GenericError = Box<dyn Error + Send + Sync + 'static>;
 
@@ -15,15 +16,17 @@ type GenericError = Box<dyn Error + Send + Sync + 'static>;
 pub struct Gazette {
     title: std::string::String,
     uri: std::string::String,
+    img_uri: std::string::String,
 }
 
 impl FromRedisValue for Gazette {
     fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Gazette> {
         if let Ok(v) = from_redis_value::<HashMap<std::string::String, std::string::String>>(v) {
-            if let (Some(title), Some(uri)) = (v.get("title"), v.get("uri")) {
+            if let (Some(title), Some(uri), Some(img_uri)) = (v.get("title"), v.get("uri"), v.get("img_uri")) {
                 return Ok(Gazette {
                     title: title.to_owned(),
                     uri: uri.to_owned(),
+                    img_uri: img_uri.to_owned(),
                 });
             }
         }
@@ -37,7 +40,6 @@ impl FromRedisValue for Gazette {
 #[tokio::main]
 async fn main() {
     tokio::spawn(async move {update_pdfs().await});
-
     crate::web::start_server().await;
 }
 
@@ -86,7 +88,7 @@ async fn entry_is_in_redis(entry: String) -> Result<bool, GenericError> {
             != 0)
 }
 
-async fn push_to_redis(uri: &str, title: &str, condition: &str) -> Result<(), GenericError> {
+async fn push_to_redis(uri: &str, title: &str, img_uri: &str, condition: &str) -> Result<(), GenericError> {
     let hash = make_hash(uri).await;
     let mut redis_client = get_redis_connection()?;
 
@@ -95,6 +97,9 @@ async fn push_to_redis(uri: &str, title: &str, condition: &str) -> Result<(), Ge
         .unwrap();
     redis_client
         .hset::<String, &str, &str, String>(format!("{}:{}", condition, hash), "uri", uri)
+        .unwrap();
+    redis_client
+        .hset::<String, &str, &str, String>(format!("{}:{}", condition, hash), "img_uri", img_uri)
         .unwrap();
 
     Ok(())
@@ -134,42 +139,70 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
 
                 if let Ok(exists) = entry_is_in_redis(hash.to_string()).await {
                     if exists {
-                        return None;
+                        return Ok(None);
                     }
                 } else {
-                    return None;
+                    return Ok(None);
                 }
 
-                if let Ok(req) = reqwest::get(&uri).await {
-                    if let Ok(bytes) = req.bytes().await {
-                        if let Ok(pdf) = lopdf::Document::load_mem(&bytes) {
-                            let page_zero: u32 = 1;
-                            if let Ok(page_text) = pdf.extract_text(&[page_zero]) {
-                                if page_text.contains("Control of Weapons Act 1990") {
-                                    let _ = push_to_redis(&uri, &title, "flagged").await;
-                                    return Some(uri);
-                                } else {
-                                    let _ = push_to_redis(&uri, "", "discarded").await;
-                                }
-                            }
-                        }
+                let req = reqwest::get(&uri).await?;
+                let bytes = req.bytes().await?;
+                let pdf = lopdf::Document::load_mem(&bytes)?;
+                let page_zero: u32 = 1;
+                let page_text = pdf.extract_text(&[page_zero])?;
+
+                if page_text.contains("Control of Weapons Act 1990") {
+                    if let Some(img_uri) = upload_map_from_gazette(&uri, &hash).await? {
+                        let _ = push_to_redis(&uri, &title, &img_uri, "flagged").await;
+                    } else {
+                        let _ = push_to_redis(&uri, &title, "", "flagged").await;
                     }
+                    return Ok(Some(uri));
+                } else {
+                    let _ = push_to_redis(&uri, "", "", "discarded").await;
                 }
-                None
+                Ok(None)
             })
         })
         .collect();
 
-    let res: Vec<Result<Option<String>, JoinError>> = futures::future::join_all(tasks).await;
+    let res: Vec<Result<Result<Option<String>, GenericError>, JoinError>> = futures::future::join_all(tasks).await;
 
     let res: Vec<String> = res
         .into_iter()
+        .filter_map(|item| item.ok())
         .filter_map(|item| item.ok())
         .filter(|item| item.is_some())
         .map(|item| item.unwrap().to_owned())
         .collect();
 
     Ok(res)
+}
+
+pub async fn upload_map_from_gazette(uri: &str, filename: &str) -> Result<Option<String>, GenericError> {
+    let req = reqwest::get(uri).await?;
+    let bytes = req.bytes().await?;
+    let pdf = lopdf::Document::load_mem(&bytes)?;
+
+    // Images always seem to only be present on the first page
+    if let Some(page_id) = pdf.get_pages().pop_first() {
+        let images = pdf.get_page_images(page_id.1)?;
+        if let Some(image) = images.first() {
+            let filename = format!("./{}.jpg", filename);
+            std::fs::write(filename.clone(), image.content).unwrap();
+            let client = ImgurClient::new("");
+            match client.upload_image(&filename).await {
+                Ok(r) => Ok(Some(r.data.link)),
+                Err(e) => Err(e.into()),
+            }
+        } else {
+            println!("No image found in {}", uri);
+            Ok(None)
+        }
+    } else {
+        println!("No pages in {}?????", uri);
+        Ok(None)
+    }
 }
 
 pub async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError> {

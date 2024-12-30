@@ -54,6 +54,7 @@ async fn render_list() -> String {
                             span.uri {
                                 (gz.uri)
                             }
+                            img src=(gz.img_uri) {}
                         }
                     }
                 }
