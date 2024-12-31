@@ -152,7 +152,7 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
                 let page_text = pdf.extract_text(&[page_zero])?;
 
                 if page_text.contains("Control of Weapons Act 1990") {
-                    if let Some(img_uri) = upload_map_from_gazette(&uri, &hash).await? {
+                    if let Some(img_uri) = upload_map_from_gazette(&uri, &pdf, &hash).await? {
                         let _ = push_to_redis(&uri, &title, &img_uri, "flagged").await;
                     } else {
                         let _ = push_to_redis(&uri, &title, "", "flagged").await;
@@ -179,28 +179,31 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
     Ok(res)
 }
 
-pub async fn upload_map_from_gazette(uri: &str, filename: &str) -> Result<Option<String>, GenericError> {
-    let req = reqwest::get(uri).await?;
-    let bytes = req.bytes().await?;
-    let pdf = lopdf::Document::load_mem(&bytes)?;
+pub async fn upload_map_from_gazette(uri: &str, pdf: &lopdf::Document, filename: &str) -> Result<Option<String>, GenericError> {
+    let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
-    // Images always seem to only be present on the first page
-    if let Some(page_id) = pdf.get_pages().pop_first() {
-        let images = pdf.get_page_images(page_id.1)?;
-        if let Some(image) = images.first() {
-            let filename = format!("./{}.jpg", filename);
-            std::fs::write(filename.clone(), image.content).unwrap();
+    for page in pdf.get_pages() {
+        match &mut pdf.get_page_images(page.1){
+            Ok(page_images) => images.append(page_images),
+            Err(_) => ()
+        };
+    }
+
+    if let Some(image) = images.first() {
+        let filename = format!("./{}.jpg", filename);
+        if std::fs::write(filename.clone(), image.content).is_ok() {
             let client = ImgurClient::new("");
-            match client.upload_image(&filename).await {
+            let result = client.upload_image(&filename).await;
+            match result {
                 Ok(r) => Ok(Some(r.data.link)),
                 Err(e) => Err(e.into()),
             }
         } else {
-            println!("No image found in {}", uri);
-            Ok(None)
+            println!("Could not write image {}", filename);
+            Err("Could not write image".into())
         }
     } else {
-        println!("No pages in {}?????", uri);
+        println!("No image found in {}", uri);
         Ok(None)
     }
 }
