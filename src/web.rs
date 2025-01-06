@@ -98,8 +98,8 @@ async fn landing() -> Markup {
                     }
                     ul hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
                             span hx-swap="innerHTML" sse-swap="heartbeat" {
-                        li  {
-                                "Refreshing... (If there's a lot of new gazettes, this could take some time)"
+                        li.notice  {
+                                "Entries are refreshing server-side in the background - if you have Javascript disabled (this is smart!), you'll need to refresh this page to see latest entries. Otherwise this message will clear when refreshing has completed."
                             }
                         }
                         ((initial_list().await))
