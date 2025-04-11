@@ -10,15 +10,26 @@ struct OpenAIMessage {
 }
 
 #[derive(Deserialize, Clone, Debug)]
-struct OpenAIChoices {
+struct OpenAIChoice {
     message: OpenAIMessage,
 }
 
 #[derive(Deserialize)]
 struct OpenAIResponse {
     id: String,
-    choices: Vec<OpenAIChoices>,
+    choices: Vec<OpenAIChoice>,
 }
+
+impl From<OpenAIResponse> for Vec<String> {
+    fn from(value: OpenAIResponse) -> Self {
+        let mut ret = Vec::new();
+        for v in value.choices[0].clone().message.content.split(",") {
+            ret.push(v.to_string());
+        };
+        ret
+    }
+}
+
 pub async fn openai_request(req: String) -> Result<Vec<String>, GenericError> {
     let mut response: Vec<String> = Vec::new();
     if let Ok(api_key) = env::var("OPENAI_API_KEY") {
@@ -37,10 +48,7 @@ pub async fn openai_request(req: String) -> Result<Vec<String>, GenericError> {
             .send()
             .await?;
 
-        let body = res.json::<OpenAIResponse>().await?;
-        for value in body.choices[0].message.content.split(",") {
-            response.push(value.to_string());
-        };
+        let response: Vec<String> = res.json::<OpenAIResponse>().await?.into();
         return Ok(response);
     }
     Err("Parsing locations failed".into())
