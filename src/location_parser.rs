@@ -31,7 +31,6 @@ impl From<OpenAIResponse> for Vec<String> {
 }
 
 pub async fn openai_request(req: String) -> Result<Vec<String>, GenericError> {
-    let mut response: Vec<String> = Vec::new();
     if let Ok(api_key) = env::var("OPENAI_API_KEY") {
         let client = Client::new();
         let res = client
@@ -48,8 +47,9 @@ pub async fn openai_request(req: String) -> Result<Vec<String>, GenericError> {
             .send()
             .await?;
 
-        let response: Vec<String> = res.json::<OpenAIResponse>().await?.into();
-        return Ok(response);
+        if let Ok(response) = res.json::<OpenAIResponse>().await {
+            return Ok(response.into());
+        }
     }
     Err("Parsing locations failed".into())
 }
