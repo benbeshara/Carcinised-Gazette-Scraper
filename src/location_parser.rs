@@ -81,7 +81,9 @@ pub async fn azure_geocoder_request(req: &str) -> Result<AzureGeocoderPosition, 
             .await?;
 
         let body = res.json::<AzureGeocoderResponse>().await?;
-        return Ok(body.results[0].position);
+        if let Some(position) = body.results.first() {
+            return Ok(position.position);
+        }
     }
     Err("Geocoding failed".into())
 }
