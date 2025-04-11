@@ -183,9 +183,8 @@ pub async fn upload_map_from_gazette(uri: &str, pdf: &lopdf::Document, filename:
     let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
     for page in pdf.get_pages() {
-        match &mut pdf.get_page_images(page.1){
-            Ok(page_images) => images.append(page_images),
-            Err(_) => ()
+        if let Ok(page_images) = &mut pdf.get_page_images(page.1) {
+            images.append(page_images)
         };
     }
 
