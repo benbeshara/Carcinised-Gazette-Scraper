@@ -14,14 +14,14 @@ type GenericError = Box<dyn Error + Send + Sync + 'static>;
 #[derive(Clone, Debug, Default)]
 #[allow(dead_code)]
 pub struct Gazette {
-    title: std::string::String,
-    uri: std::string::String,
-    img_uri: std::string::String,
+    title: String,
+    uri: String,
+    img_uri: String,
 }
 
 impl FromRedisValue for Gazette {
     fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Gazette> {
-        if let Ok(v) = from_redis_value::<HashMap<std::string::String, std::string::String>>(v) {
+        if let Ok(v) = from_redis_value::<HashMap<String, String>>(v) {
             if let (Some(title), Some(uri), Some(img_uri)) = (v.get("title"), v.get("uri"), v.get("img_uri")) {
                 return Ok(Gazette {
                     title: title.to_owned(),
@@ -39,14 +39,16 @@ impl FromRedisValue for Gazette {
 
 #[tokio::main]
 async fn main() {
-    tokio::spawn(async move {update_pdfs().await});
-    crate::web::start_server().await;
+    tokio::spawn(async {
+        update_pdfs().await
+    });
+    web::start_server().await;
 }
 
 fn get_redis_connection() -> Result<Connection, GenericError> {
     let redis_url: String = std::env::var("REDIS_URL")
-        .unwrap_or_else(|_| "redis://localhost:6379".to_string()) // Get the port as a string or default to "3000"
-        .parse() // Parse the port string into a u16
+        .unwrap_or_else(|_| "redis://localhost:6379".to_string())
+        .parse()
         .expect("Failed to get REDIS_URL");
     let redis_url_insecure = redis_url + "#insecure";
     let redis = redis::Client::open(redis_url_insecure)?;
@@ -75,13 +77,13 @@ async fn entry_is_in_redis(entry: String) -> Result<bool, GenericError> {
     let mut redis_client = get_redis_connection()?;
 
     Ok(redis_client
-        .exists::<std::string::String, std::string::String>(format!("flagged:{}", entry))
+        .exists::<String, String>(format!("flagged:{}", entry))
         .unwrap()
         .parse::<isize>()
         .unwrap()
         != 0
         || redis_client
-            .exists::<std::string::String, std::string::String>(format!("discarded:{}", entry))
+            .exists::<String, String>(format!("discarded:{}", entry))
             .unwrap()
             .parse::<isize>()
             .unwrap()
@@ -213,10 +215,10 @@ pub async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError
     let mut gazettes: Vec<Gazette> = vec![];
 
     let keys = redis_client
-        .keys::<std::string::String, Vec<std::string::String>>("flagged:*".to_string())?;
+        .keys::<String, Vec<String>>("flagged:*".to_string())?;
 
     for key in keys {
-        if let Ok(res) = redis_client.hgetall::<std::string::String, Gazette>(key) {
+        if let Ok(res) = redis_client.hgetall::<String, Gazette>(key) {
             gazettes.push(res);
         }
     }
