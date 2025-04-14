@@ -1,4 +1,5 @@
 mod web;
+mod location_parser;
 
 use std::{collections::HashMap, error::Error};
 

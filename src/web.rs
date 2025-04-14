@@ -87,6 +87,8 @@ async fn landing() -> Markup {
                 link rel="icon" type="image/x-icon" href="favicon.ico";
                 script type="text/javascript" src="https://unpkg.com/htmx.org@2.0.0-beta3"{}
                 script type="text/javascript" src="https://unpkg.com/htmx-ext-sse@2.1.0/sse.js"{}
+                link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="";
+                script type="text/javascript" src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""{}
             }
             body {
                 div.center {
@@ -95,6 +97,18 @@ async fn landing() -> Markup {
                     }
                     span.subheading {
                         "Gazettes sourced from the Victorian Gazette website"
+                    }
+                    div #map{}
+
+                    script {
+                        "var map = L.map('map').setView([-37.81400000,  144.96332000], 13);
+                        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                            maxZoom: 19,
+                            attribution: '&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>'
+                        }).addTo(map);
+                        var polygon = L.polygon([
+                           [-37.8378228, 144.9429777], [-37.8368427, 144.9279877], [-37.8420372, 144.9392338], [-37.8378228, 144.9429777]
+                        ]).addTo(map);"
                     }
                     ul hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
                             span hx-swap="innerHTML" sse-swap="heartbeat" {
@@ -137,6 +151,9 @@ fn stylesheet() -> Markup {
                 word-wrap: break-word;
                 white-space: normal;
                 margin-bottom: 1rem;
+            }
+            div#map {
+                height: 200px;
             }
             span.uri {
                 font-size: 0.9rem;
