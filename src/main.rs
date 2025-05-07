@@ -1,8 +1,10 @@
 mod web;
 
-use std::{collections::HashMap, error::Error};
+use std::error::Error;
 
-use redis::{from_redis_value, Commands, Connection, ErrorKind, FromRedisValue, RedisError};
+use redis::{Commands, Connection};
+use redis_macros::{ToRedisArgs, FromRedisValue};
+use serde::{Deserialize, Serialize};
 use select::document::Document;
 use select::predicate::Name;
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
@@ -11,36 +13,19 @@ use imgurs::ImgurClient;
 
 type GenericError = Box<dyn Error + Send + Sync + 'static>;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
 pub struct Gazette {
-    title: std::string::String,
-    uri: std::string::String,
-    img_uri: std::string::String,
-}
-
-impl FromRedisValue for Gazette {
-    fn from_redis_value(v: &redis::Value) -> redis::RedisResult<Gazette> {
-        if let Ok(v) = from_redis_value::<HashMap<std::string::String, std::string::String>>(v) {
-            if let (Some(title), Some(uri), Some(img_uri)) = (v.get("title"), v.get("uri"), v.get("img_uri")) {
-                return Ok(Gazette {
-                    title: title.to_owned(),
-                    uri: uri.to_owned(),
-                    img_uri: img_uri.to_owned(),
-                });
-            }
-        }
-        Err(RedisError::from((
-            ErrorKind::ParseError,
-            "Could not parse Gazette from redis result",
-        )))
-    }
+    uri: String,
+    title: Option<String>,
+    img_uri: Option<String>,
+    flagged: bool
 }
 
 #[tokio::main]
 async fn main() {
-    tokio::spawn(async move {update_pdfs().await});
-    crate::web::start_server().await;
+    tokio::spawn(async move { update_pdfs().await });
+    web::start_server().await;
 }
 
 fn get_redis_connection() -> Result<Connection, GenericError> {
@@ -75,32 +60,31 @@ async fn entry_is_in_redis(entry: String) -> Result<bool, GenericError> {
     let mut redis_client = get_redis_connection()?;
 
     Ok(redis_client
-        .exists::<std::string::String, std::string::String>(format!("flagged:{}", entry))
+        .exists::<String, String>(format!("flagged:{}", entry))
         .unwrap()
         .parse::<isize>()
         .unwrap()
         != 0
         || redis_client
-            .exists::<std::string::String, std::string::String>(format!("discarded:{}", entry))
+            .exists::<String, String>(format!("discarded:{}", entry))
             .unwrap()
             .parse::<isize>()
             .unwrap()
             != 0)
 }
 
-async fn push_to_redis(uri: &str, title: &str, img_uri: &str, condition: &str) -> Result<(), GenericError> {
-    let hash = make_hash(uri).await;
+async fn push_to_redis(gazette: Gazette) -> Result<(), GenericError> {
+    let mut hash = make_hash(&gazette.uri).await;
+
+    if gazette.flagged {
+        hash = format!("flagged:{}", hash);
+    } else {
+        hash = format!("discarded:{}", hash);
+    }
+
     let mut redis_client = get_redis_connection()?;
 
-    redis_client
-        .hset::<String, &str, &str, String>(format!("{}:{}", condition, hash), "title", title)
-        .unwrap();
-    redis_client
-        .hset::<String, &str, &str, String>(format!("{}:{}", condition, hash), "uri", uri)
-        .unwrap();
-    redis_client
-        .hset::<String, &str, &str, String>(format!("{}:{}", condition, hash), "img_uri", img_uri)
-        .unwrap();
+    redis_client.set(&hash, &gazette)?;
 
     Ok(())
 }
@@ -152,15 +136,25 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
                 let page_text = pdf.extract_text(&[page_zero])?;
 
                 if page_text.contains("Control of Weapons Act 1990") {
-                    if let Some(img_uri) = upload_map_from_gazette(&uri, &pdf, &hash).await? {
-                        let _ = push_to_redis(&uri, &title, &img_uri, "flagged").await;
-                    } else {
-                        let _ = push_to_redis(&uri, &title, "", "flagged").await;
-                    }
+                    let img_uri = upload_map_from_gazette(&uri, &pdf, &hash).await.unwrap_or(None);
+                    let gazette = Gazette {
+                        uri: uri.clone(),
+                        title: Some(title),
+                        img_uri,
+                        flagged: true
+                    };
+
+                    let _ = push_to_redis(gazette).await;
                     return Ok(Some(uri));
-                } else {
-                    let _ = push_to_redis(&uri, "", "", "discarded").await;
                 }
+
+                let gazette = Gazette {
+                    uri: uri.clone(),
+                    title: None,
+                    img_uri: None,
+                    flagged: false,
+                };
+                let _ = push_to_redis(gazette).await;
                 Ok(None)
             })
         })
@@ -183,10 +177,9 @@ pub async fn upload_map_from_gazette(uri: &str, pdf: &lopdf::Document, filename:
     let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
     for page in pdf.get_pages() {
-        match &mut pdf.get_page_images(page.1){
-            Ok(page_images) => images.append(page_images),
-            Err(_) => ()
-        };
+        if let Ok(page_images) = &mut pdf.get_page_images(page.1) {
+            images.append(page_images)
+        }
     }
 
     if let Some(image) = images.first() {
@@ -214,10 +207,10 @@ pub async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError
     let mut gazettes: Vec<Gazette> = vec![];
 
     let keys = redis_client
-        .keys::<std::string::String, Vec<std::string::String>>("flagged:*".to_string())?;
+        .keys::<String, Vec<String>>("flagged:*".to_string())?;
 
     for key in keys {
-        if let Ok(res) = redis_client.hgetall::<std::string::String, Gazette>(key) {
+        if let Ok(res) = redis_client.get::<String, Gazette>(key) {
             gazettes.push(res);
         }
     }
