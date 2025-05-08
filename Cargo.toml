@@ -16,6 +16,7 @@ tokio = { version = "1.42.0", features = ["full"] }
 tokio-stream = "0.1.17"
 imgurs = "0.11.2"
 geocoding = "0.4.0"
-serde_json = "1.0.128"
-serde = { version = "1.0.209", features = ["derive"] }
+redis-macros = "0.5.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
 itertools = "0.13.0"

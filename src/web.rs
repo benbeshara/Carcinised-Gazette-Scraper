@@ -51,7 +51,9 @@ async fn render_list() -> String {
                     div {
                         span {
                             a href=(gz.uri) target="_blank" {
-                                (gz.title)
+                                @if let Some(title) = &gz.title {
+                                    (title)
+                                }
                                 span.uri {
                                     (gz.uri)
                                 }
@@ -59,9 +61,9 @@ async fn render_list() -> String {
                         }
                     }
                     div.thumbnail {
-                        @if gz.img_uri != "Image upload failed" {
-                            a href=(gz.img_uri) target="_blank" {
-                                img src=(gz.img_uri) {}
+                        @if let Some(img_uri) = &gz.img_uri {
+                            a href=(img_uri) target="_blank" {
+                                img src=(img_uri) {}
                             }
                         }
                     }
