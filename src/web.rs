@@ -155,7 +155,7 @@ fn stylesheet() -> Markup {
                 margin-bottom: 1rem;
             }
             div#map {
-                height: 200px;
+                height: 600px;
             }
             span.uri {
                 font-size: 0.9rem;

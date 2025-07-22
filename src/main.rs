@@ -1,5 +1,8 @@
 mod web;
 mod location_parser;
+mod geocoder;
+mod parser;
+mod utils;
 
 use std::error::Error;
 
