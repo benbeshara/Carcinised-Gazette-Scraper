@@ -1,8 +1,12 @@
-use std::env;
+use crate::geocoder::geocoder::GeocoderProvider;
+use crate::utils::maptypes::GeoPosition;
+use crate::GenericError;
 use reqwest::Client;
 use serde::Deserialize;
-use crate::GenericError;
-use crate::geocoder::geoposition::{GeoPosition, GeocoderRequest};
+use std::env;
+
+#[derive(Clone, Copy, Debug)]
+pub struct AzureGeocoderProvider;
 
 #[derive(Deserialize, Copy, Clone, Debug)]
 pub struct AzureGeocoderPosition {
@@ -22,43 +26,37 @@ struct AzureGeocoderResponse {
     results: Vec<AzureGeocoderResult>,
 }
 
-pub trait AzureGeocoderRequest {
-    async fn azure_geocoder_request(&self) -> Result<AzureGeocoderPosition, GenericError>;
-}
-
-impl From<AzureGeocoderResponse> for Result<AzureGeocoderPosition, GenericError> {
-    fn from(value: AzureGeocoderResponse) -> Self {
-        // We are *likely* to want a cross-street value
-        for result in &value.results {
-            if result.r#type == "Cross Street" {
-                return Ok(result.position);
-            }
-        }
-
-        // If there is none, the first result is all we've got
-        if let Some(result) = value.results.first() {
-            Ok(result.position)
-        } else {
-            Err("Geocoder returned no results".into())
-        }
-    }
-}
-
-impl AzureGeocoderRequest for GeocoderRequest {
-    async fn azure_geocoder_request(&self) -> Result<AzureGeocoderPosition, GenericError> {
+#[async_trait::async_trait]
+impl GeocoderProvider for AzureGeocoderProvider {
+    async fn geocode(&self, input: &String) -> Result<GeoPosition, GenericError> {
         if let Ok(api_key) = env::var("AZURE_API_KEY") {
             let client = Client::new();
-            let req = format!("{}, VICTORIA, AUSTRALIA", self.request);
+            let req = format!("{}, VICTORIA, AUSTRALIA", input);
             let request = format!("https://atlas.microsoft.com/search/address/json?&subscription-key={api_key}&api-version=1.0&language=en-AU&countrySet=AU&query={req}");
-            let res = client
-                .get(request)
-                .send()
-                .await?;
+            let res = client.get(request).send().await?;
 
             let body = res.json::<AzureGeocoderResponse>().await?;
             return body.into();
         }
         Err("Geocoding failed".into())
+    }
+}
+
+impl From<AzureGeocoderResponse> for Result<GeoPosition, GenericError> {
+    fn from(value: AzureGeocoderResponse) -> Self {
+        // We are *likely* to want a cross-street value
+        for result in &value.results {
+            if result.r#type == "Cross Street" {
+                return Ok((&result.position).into());
+            }
+        }
+
+        // If there is none, the first result is all we've got
+        if let Some(result) = value.results.first() {
+            Ok((&result.position).into())
+        } else {
+            Err("Geocoder returned no results".into())
+        }
     }
 }
 

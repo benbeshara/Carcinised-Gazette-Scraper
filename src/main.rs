@@ -1,19 +1,19 @@
-mod web;
-mod location_parser;
 mod geocoder;
+mod location_parser;
 mod parser;
 mod utils;
+mod web;
 
 use std::error::Error;
 
+use imgurs::ImgurClient;
 use redis::{Commands, Connection};
-use redis_macros::{ToRedisArgs, FromRedisValue};
-use serde::{Deserialize, Serialize};
+use redis_macros::{FromRedisValue, ToRedisArgs};
 use select::document::Document;
 use select::predicate::Name;
+use serde::{Deserialize, Serialize};
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
 use tokio::task::JoinError;
-use imgurs::ImgurClient;
 
 type GenericError = Box<dyn Error + Send + Sync + 'static>;
 
@@ -23,7 +23,7 @@ pub struct Gazette {
     uri: String,
     title: Option<String>,
     img_uri: Option<String>,
-    flagged: bool
+    flagged: bool,
 }
 
 #[tokio::main]
@@ -49,8 +49,14 @@ pub async fn update_pdfs() -> Result<(), GenericError> {
     let base_uri = "http://www.gazette.vic.gov.au";
 
     match parse_webpage(url, base_uri).await {
-        Ok(res) => {println!("PDF Update succeeded"); Ok(res)},
-        Err(e) => {println!("PDF Update failed: {:?}", e.to_string()); Err(e)},
+        Ok(res) => {
+            println!("PDF Update succeeded");
+            Ok(res)
+        }
+        Err(e) => {
+            println!("PDF Update failed: {:?}", e.to_string());
+            Err(e)
+        }
     }
 }
 
@@ -112,7 +118,7 @@ async fn parse_webpage(uri: &str, base_uri: &str) -> Result<(), GenericError> {
 
     for chunk in chunks {
         let _ = filter_gazettes(chunk.to_vec()).await;
-    };
+    }
 
     Ok(())
 }
@@ -140,12 +146,14 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
                 let page_text = pdf.extract_text(&[page_zero])?;
 
                 if page_text.contains("Control of Weapons Act 1990") {
-                    let img_uri = upload_map_from_gazette(&uri, &pdf, &hash).await.unwrap_or(None);
+                    let img_uri = upload_map_from_gazette(&uri, &pdf, &hash)
+                        .await
+                        .unwrap_or(None);
                     let gazette = Gazette {
                         uri: uri.clone(),
                         title: Some(title),
                         img_uri,
-                        flagged: true
+                        flagged: true,
                     };
 
                     let _ = push_to_redis(gazette).await;
@@ -164,7 +172,8 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
         })
         .collect();
 
-    let res: Vec<Result<Result<Option<String>, GenericError>, JoinError>> = futures::future::join_all(tasks).await;
+    let res: Vec<Result<Result<Option<String>, GenericError>, JoinError>> =
+        futures::future::join_all(tasks).await;
 
     let res: Vec<String> = res
         .into_iter()
@@ -177,7 +186,11 @@ async fn filter_gazettes(uri_list: Vec<(String, String)>) -> Result<Vec<String>,
     Ok(res)
 }
 
-pub async fn upload_map_from_gazette(uri: &str, pdf: &lopdf::Document, filename: &str) -> Result<Option<String>, GenericError> {
+pub async fn upload_map_from_gazette(
+    uri: &str,
+    pdf: &lopdf::Document,
+    filename: &str,
+) -> Result<Option<String>, GenericError> {
     let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
     for page in pdf.get_pages() {
@@ -210,8 +223,7 @@ pub async fn retrieve_gazettes_from_redis() -> Result<Vec<Gazette>, GenericError
 
     let mut gazettes: Vec<Gazette> = vec![];
 
-    let keys = redis_client
-        .keys::<String, Vec<String>>("flagged:*".to_string())?;
+    let keys = redis_client.keys::<String, Vec<String>>("flagged:*".to_string())?;
 
     for key in keys {
         if let Ok(res) = redis_client.get::<String, Gazette>(key) {

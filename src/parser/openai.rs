@@ -1,8 +1,8 @@
-use std::env;
+use crate::GenericError;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
-use crate::GenericError;
+use std::env;
 
 #[derive(Deserialize, Clone, Debug)]
 struct OpenAIMessage {
@@ -25,7 +25,7 @@ impl From<OpenAIResponse> for Vec<String> {
         let mut ret = Vec::new();
         for v in value.choices[0].clone().message.content.split(",") {
             ret.push(v.to_string());
-        };
+        }
         ret
     }
 }
@@ -48,8 +48,8 @@ pub async fn openai_request(req: String) -> Result<Vec<String>, GenericError> {
         .send()
         .await?;
 
-
-    res.json::<OpenAIResponse>().await
+    res.json::<OpenAIResponse>()
+        .await
         .and_then(|r| Ok(r.into()))
         .map_err(Into::into)
 }

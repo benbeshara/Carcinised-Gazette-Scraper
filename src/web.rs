@@ -1,10 +1,15 @@
-use futures::stream::{self, Stream};
-use tokio_stream::StreamExt as _;
-use std::{convert::Infallible, time::Duration};
-use std::net::SocketAddr;
-use axum::{self, routing::get, Router, response::sse::{Sse, Event}};
-use maud::{html, Markup, PreEscaped};
 use crate::update_pdfs;
+use axum::{
+    self,
+    response::sse::{Event, Sse},
+    routing::get,
+    Router,
+};
+use futures::stream::{self, Stream};
+use maud::{html, Markup, PreEscaped};
+use std::net::SocketAddr;
+use std::{convert::Infallible, time::Duration};
+use tokio_stream::StreamExt as _;
 
 pub async fn start_server() {
     let app = Router::new()
@@ -23,7 +28,8 @@ pub async fn start_server() {
 }
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let gazette_stream = stream::once(async{ Event::default().data(send_data().await).event("list")}).map(Ok);
+    let gazette_stream =
+        stream::once(async { Event::default().data(send_data().await).event("list") }).map(Ok);
 
     Sse::new(gazette_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
@@ -33,7 +39,7 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
 }
 
 async fn send_data() -> String {
-    tokio::spawn(async move {update_pdfs().await});
+    tokio::spawn(async move { update_pdfs().await });
     format!("<ul>{}</ul>", render_list().await)
 }
 
@@ -68,7 +74,9 @@ async fn render_list() -> String {
                         }
                     }
                 }
-            ).into_string().as_str();
+            )
+            .into_string()
+            .as_str();
 
             acc
         });

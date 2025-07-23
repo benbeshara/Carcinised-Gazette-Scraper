@@ -1,3 +1,3 @@
-pub mod geoposition;
-pub mod google;
 pub mod azure;
+pub mod geocoder;
+pub mod google;

@@ -1,8 +1,12 @@
-use std::env;
+use crate::geocoder::geocoder::GeocoderProvider;
+use crate::utils::maptypes::GeoPosition;
+use crate::GenericError;
 use reqwest::Client;
 use serde::Deserialize;
-use crate::GenericError;
-use crate::geocoder::geoposition::{GeoPosition, GeocoderRequest};
+use std::env;
+
+#[derive(Clone, Copy, Debug)]
+pub struct GoogleGeocoderProvider;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct GoogleGeocoderPosition {
@@ -26,37 +30,31 @@ struct GoogleGeocoderResponse {
     results: Vec<GoogleGeocoderResult>,
 }
 
-pub trait GoogleGeocoderRequest {
-    async fn google_geocoder_request(&self) -> Result<GoogleGeocoderPosition, GenericError>;
-}
-
-impl From<GoogleGeocoderResponse> for Result<GoogleGeocoderPosition, GenericError> {
-    fn from(value: GoogleGeocoderResponse) -> Self {
-        // The google geocoder seems to be good enough to get a hit on the first result,
-        // but I'm not sure how i'd filter them to find relevant ones if it doesn't
-        if let Some(result) = value.results.first() {
-            Ok(result.clone().geometry.location)
-        } else {
-            Err("Geocoder returned no results".into())
-        }
-    }
-}
-
-impl GoogleGeocoderRequest for GeocoderRequest {
-    async fn google_geocoder_request(&self) -> Result<GoogleGeocoderPosition, GenericError> {
+#[async_trait::async_trait]
+impl GeocoderProvider for GoogleGeocoderProvider {
+    async fn geocode(&self, input: &String) -> Result<GeoPosition, GenericError> {
         if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             let client = Client::new();
-            let req = format!("{}, VICTORIA, AUSTRALIA", self.request);
+            let req = format!("{}, VICTORIA, AUSTRALIA", input);
             let request = format!("https://maps.googleapis.com/maps/api/geocode/json?key={api_key}&api-version=1.0&language=en-AU&region=AU&address={req}");
-            let res = client
-                .get(request)
-                .send()
-                .await?;
+            let res = client.get(request).send().await?;
 
             let body = res.json::<GoogleGeocoderResponse>().await?;
             return body.into();
         }
         Err("Geocoding failed".into())
+    }
+}
+
+impl From<GoogleGeocoderResponse> for Result<GeoPosition, GenericError> {
+    fn from(value: GoogleGeocoderResponse) -> Self {
+        // The google geocoder seems to be good enough to get a hit on the first result,
+        // but I'm not sure how i'd filter them to find relevant ones if it doesn't
+        if let Some(result) = value.results.first() {
+            Ok((&result.clone().geometry.location).into())
+        } else {
+            Err("Geocoder returned no results".into())
+        }
     }
 }
 
