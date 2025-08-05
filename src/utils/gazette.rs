@@ -5,6 +5,11 @@ use imgurs::ImgurClient;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
+use crate::geocoder::geocoder::GeocoderRequest;
+use crate::geocoder::google::GoogleGeocoderProvider;
+use crate::location_parser::location_parser::LocationParser;
+use crate::location_parser::openai::OpenAI;
+use crate::utils::maptypes::{GeoPosition, MapPolygon};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
@@ -13,6 +18,7 @@ pub struct Gazette {
     pub title: Option<String>,
     pub img_uri: Option<String>,
     pub flagged: bool,
+    pub polygon: Option<MapPolygon>,
 }
 
 pub trait Save {
@@ -29,8 +35,8 @@ pub fn make_hash(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-impl Save for Gazette {
-    async fn save(&self) -> Result<bool> {
+impl Gazette {
+    pub(crate) async fn save(&self) -> Result<bool> {
         let mut hash = make_hash(&self.uri);
 
         if self.flagged {
@@ -47,10 +53,8 @@ impl Save for Gazette {
 
         Ok(true)
     }
-}
 
-impl UploadImage for Gazette {
-    async fn try_upload_image(&self) -> Result<Option<String>> {
+    pub(crate) async fn try_upload_image(&self) -> Result<Option<String>> {
         let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
         let req = reqwest::get(&self.uri).await?;
@@ -81,5 +85,38 @@ impl UploadImage for Gazette {
             println!("No image found in {}", &self.uri);
             Ok(None)
         }
+    }
+
+    pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
+        let req = reqwest::get(&self.uri).await?;
+        let bytes = req.bytes().await?;
+        let pdf = lopdf::Document::load_mem(&bytes)?;
+
+        for page in pdf.get_pages() {
+            if let Ok(page_text) = &mut pdf.extract_text(&[page.0]) {
+                let loc = LocationParser {
+                    provider: OpenAI,
+                    locations: page_text.to_owned()
+                };
+                if let Ok(places) = loc.parse_locations().await {
+                    let futures = places.into_iter().map(|place| async move {
+                        let gc = GeocoderRequest {
+                            service: GoogleGeocoderProvider,
+                            input: place
+                        };
+                        let pos = gc.geocode().await.unwrap_or_default();
+                        GeoPosition {
+                            latitude: pos.latitude.clone(),
+                            longitude: pos.longitude.clone()
+                        }
+                    });
+                    let polygon = futures::future::join_all(futures).await;
+                    return Ok(Some(MapPolygon {
+                        data: polygon
+                    }));
+                }
+            }
+        }
+        Ok(None)
     }
 }

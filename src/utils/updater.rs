@@ -53,10 +53,15 @@ impl Updater {
                 title: Some(title),
                 img_uri: None,
                 flagged: true,
+                polygon: None
             };
 
             if let Ok(img) = gazette.try_upload_image().await {
                 gazette.img_uri = img;
+            }
+
+            if let Ok(polygon) = gazette.get_polygon().await {
+                gazette.polygon = polygon;
             }
 
             let _ = gazette.save().await;
@@ -69,6 +74,7 @@ impl Updater {
                 title: Some(title),
                 img_uri: None,
                 flagged: false,
+                polygon: None
             };
 
             let _ = gazette.save().await;

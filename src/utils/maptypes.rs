@@ -1,8 +1,9 @@
 use itertools::Itertools;
 use std::fmt;
 use std::fmt::{Display, Formatter};
+use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct GeoPosition {
     pub latitude: f64,
     pub longitude: f64,
@@ -12,7 +13,7 @@ pub trait Sanitise {
     fn sanitise(&mut self);
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct MapPolygon {
     pub data: Vec<GeoPosition>,
 }

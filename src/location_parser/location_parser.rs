@@ -9,8 +9,8 @@ pub struct LocationParser<T>
 where
     T: LocationParserService,
 {
-    provider: T,
-    locations: String,
+    pub provider: T,
+    pub locations: String,
 }
 
 impl<T> LocationParser<T>
