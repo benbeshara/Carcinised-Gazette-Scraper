@@ -1,4 +1,3 @@
-use std::ops::BitAnd;
 use crate::db::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};

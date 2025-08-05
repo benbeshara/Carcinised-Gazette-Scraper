@@ -2,7 +2,7 @@ use crate::db::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
 use crate::utils::gazette::{make_hash, Gazette, Save, UploadImage};
 use anyhow::Result;
-use futures::stream::{self, StreamExt};
+use futures::stream::StreamExt;
 use itertools::Itertools;
 use select::document::Document;
 use select::predicate::Name;
@@ -18,56 +18,69 @@ pub struct Updater {
 
 impl Updater {
     pub async fn update(&mut self) -> Result<Vec<String>> {
-        if let Ok(results) = self.parse_webpage().await {
-            let mut flagged: Vec<(String, String)> = vec![];
-            let mut discarded: Vec<(String, String)> = vec![];
+        let results = self.parse_webpage().await?;
 
-            for result in results {
-                let (title, uri) = &result;
+        let filtered_results = futures::stream::iter(results)
+            .map(|result| async {
+                let (_, uri) = &result;
                 let hash = make_hash(&uri);
                 let db = DatabaseConnection {
                     provider: RedisProvider,
                 };
-                if db.has_entry(&hash).await? == false {
-                    if self.filter_result(&result).await? {
-                        flagged.push((title.clone(), uri.clone()));
-                    } else {
-                        discarded.push((title.clone(), uri.clone()));
+
+                match db.has_entry(&hash).await {
+                    Ok(false) => {
+                        match self.filter_result(&result).await {
+                            Ok(is_flagged) => Some((result, is_flagged)),
+                            Err(_) => None,
+                        }
                     }
+                    _ => None,
                 }
+            })
+            .buffer_unordered(12)
+            .collect::<Vec<_>>()
+            .await;
+
+        let (flagged, discarded): (Vec<_>, Vec<_>) = filtered_results
+            .into_iter()
+            .flatten()
+            .partition(|(_result, is_flagged)| *is_flagged);
+
+        let flagged_futures = flagged.into_iter().map(|((title, uri), _)| async move {
+            let mut gazette = Gazette {
+                uri: uri.clone(),
+                title: Some(title),
+                img_uri: None,
+                flagged: true,
             };
 
-            for (title, uri) in &flagged {
-                let mut gazette = Gazette {
-                    uri: uri.clone(),
-                    title: Some(title.clone()),
-                    img_uri: None,
-                    flagged: true,
-                };
-
-                if let Ok(img) = gazette.try_upload_image().await {
-                    gazette.img_uri = img;
-                }
-
-                let _ = gazette.save().await;
+            if let Ok(img) = gazette.try_upload_image().await {
+                gazette.img_uri = img;
             }
 
-            for (title, uri) in discarded {
-                let gazette = Gazette {
-                    uri: uri.clone(),
-                    title: None,
-                    img_uri: None,
-                    flagged: false,
-                };
+            let _ = gazette.save().await;
+            uri
+        });
 
-                let _ = gazette.save().await;
-            }
+        let discarded_futures = discarded.into_iter().map(|((title, uri), _)| async move {
+            let gazette = Gazette {
+                uri: uri.clone(),
+                title: Some(title),
+                img_uri: None,
+                flagged: false,
+            };
 
-            println!("PDF Update Complete");
-            Ok(flagged.iter().map(|(_, uri)| uri.clone()).collect())
-        } else {
-            Err(anyhow::anyhow!("PDF Update Failed"))
-        }
+            let _ = gazette.save().await;
+        });
+
+        let (flagged_uris, _) = tokio::join!(
+        futures::future::join_all(flagged_futures),
+        futures::future::join_all(discarded_futures)
+    );
+
+        println!("PDF Update Complete");
+        Ok(flagged_uris)
     }
 
     async fn parse_webpage(&self) -> Result<Vec<(String, String)>> {
