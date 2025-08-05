@@ -9,7 +9,7 @@ use crate::geocoder::geocoder::GeocoderRequest;
 use crate::geocoder::google::GoogleGeocoderProvider;
 use crate::location_parser::location_parser::LocationParser;
 use crate::location_parser::openai::OpenAI;
-use crate::utils::maptypes::{GeoPosition, MapPolygon};
+use crate::utils::maptypes::{GeoPosition, MapPolygon, Sanitise};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
@@ -110,7 +110,8 @@ impl Gazette {
                             longitude: pos.longitude.clone()
                         }
                     });
-                    let polygon = futures::future::join_all(futures).await;
+                    let mut polygon = futures::future::join_all(futures).await;
+                    polygon.sanitise();
                     return Ok(Some(MapPolygon {
                         data: polygon
                     }));
