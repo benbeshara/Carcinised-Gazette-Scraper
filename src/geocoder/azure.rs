@@ -1,9 +1,9 @@
 use crate::geocoder::geocoder::GeocoderProvider;
 use crate::utils::maptypes::GeoPosition;
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use std::env;
-use anyhow::{anyhow, Result};
 
 #[derive(Clone, Copy, Debug)]
 pub struct AzureGeocoderProvider;

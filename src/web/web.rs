@@ -1,3 +1,6 @@
+use crate::db::db::DatabaseConnection;
+use crate::db::redis::RedisProvider;
+use crate::utils::updater::Updater;
 use axum::{
     self,
     response::sse::{Event, Sse},
@@ -9,9 +12,6 @@ use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, time::Duration};
 use tokio_stream::StreamExt as _;
-use crate::db::db::DatabaseConnection;
-use crate::db::redis::RedisProvider;
-use crate::utils::updater::Updater;
 
 pub async fn start_server() {
     let app = Router::new()
@@ -31,8 +31,7 @@ pub async fn start_server() {
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let data = send_data().await;
-    let gazette_stream =
-        stream::once(async { Event::default().data(data).event("list") }).map(Ok);
+    let gazette_stream = stream::once(async { Event::default().data(data).event("list") }).map(Ok);
 
     Sse::new(gazette_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
@@ -58,7 +57,7 @@ async fn initial_list() -> Markup {
 
 async fn render_list() -> String {
     let db = DatabaseConnection {
-        provider: RedisProvider
+        provider: RedisProvider,
     };
     if let Ok(gazettes) = db.fetch_entries().await {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
@@ -85,8 +84,8 @@ async fn render_list() -> String {
                     }
                 }
             )
-                .into_string()
-                .as_str();
+            .into_string()
+            .as_str();
 
             acc
         });

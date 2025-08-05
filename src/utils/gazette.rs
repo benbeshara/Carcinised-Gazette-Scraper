@@ -1,10 +1,10 @@
+use crate::db::db::DatabaseConnection;
+use crate::db::redis::RedisProvider;
 use anyhow::{anyhow, Result};
 use imgurs::ImgurClient;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
-use crate::db::db::DatabaseConnection;
-use crate::db::redis::RedisProvider;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
@@ -40,7 +40,7 @@ impl Save for Gazette {
         }
 
         let db = DatabaseConnection {
-            provider: RedisProvider
+            provider: RedisProvider,
         };
 
         db.create_entry(&hash, self).await?;

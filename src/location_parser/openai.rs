@@ -1,9 +1,9 @@
+use crate::location_parser::location_parser::LocationParserService;
 use anyhow::Result;
 use reqwest::Client;
 use serde::Deserialize;
 use serde_json::json;
 use std::env;
-use crate::location_parser::location_parser::LocationParserService;
 
 #[derive(Deserialize, Clone, Debug)]
 struct OpenAIMessage {

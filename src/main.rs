@@ -1,8 +1,8 @@
+mod db;
 mod geocoder;
+mod location_parser;
 mod utils;
 mod web;
-mod db;
-mod location_parser;
 
 use utils::updater::Updater;
 use web::web::start_server;

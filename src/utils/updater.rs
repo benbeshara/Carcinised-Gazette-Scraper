@@ -1,11 +1,11 @@
+use crate::db::db::DatabaseConnection;
+use crate::db::redis::RedisProvider;
+use crate::utils::gazette::{make_hash, Gazette, Save, UploadImage};
 use anyhow::Result;
 use futures::stream::{self, StreamExt};
 use itertools::Itertools;
 use select::document::Document;
 use select::predicate::Name;
-use crate::db::db::DatabaseConnection;
-use crate::db::redis::RedisProvider;
-use crate::utils::gazette::{make_hash, Gazette, Save, UploadImage};
 
 const FIRST_PAGE: u32 = 1;
 const TARGET_TEXT: &str = "Control of Weapons Act 1990";
@@ -17,7 +17,7 @@ pub struct Updater {
 }
 
 impl Updater {
-    pub async fn update(&mut self) -> Result<Vec<String>>{
+    pub async fn update(&mut self) -> Result<Vec<String>> {
         if let Ok(chunks) = self.parse_webpage().await {
             let result = self.process_chunks(chunks).await?;
             let (flagged, discarded) = result;
@@ -53,7 +53,10 @@ impl Updater {
         }
     }
 
-    async fn process_chunks(&self, chunks: Vec<Vec<(String, String)>>) -> Result<(Vec<(String, String)>, Vec<(String, String)>)> {
+    async fn process_chunks(
+        &self,
+        chunks: Vec<Vec<(String, String)>>,
+    ) -> Result<(Vec<(String, String)>, Vec<(String, String)>)> {
         let results = stream::iter(chunks)
             .map(|chunk| async move {
                 let mut flagged = Vec::new();
@@ -65,7 +68,9 @@ impl Updater {
                         discarded.push(item.clone());
                     }
                 }
-                Ok::<(Vec<(String, String)>, Vec<(String, String)>), anyhow::Error>((flagged, discarded))
+                Ok::<(Vec<(String, String)>, Vec<(String, String)>), anyhow::Error>((
+                    flagged, discarded,
+                ))
             })
             .buffer_unordered(3)
             .collect::<Vec<_>>()
@@ -94,12 +99,9 @@ impl Updater {
         let pdf_list: Vec<(String, String)> = Document::from(response.as_str())
             .find(Name("a"))
             .filter_map(|element| {
-                element.attr("href").map(|href| {
-                    (
-                        element.inner_html(),
-                        format!("{}{}", self.base_uri, href)
-                    )
-                })
+                element
+                    .attr("href")
+                    .map(|href| (element.inner_html(), format!("{}{}", self.base_uri, href)))
             })
             .filter(|(_, url)| url.ends_with(".pdf"))
             .collect();
@@ -110,7 +112,7 @@ impl Updater {
     async fn filter_result(&self, chunk: &(String, String)) -> Result<bool> {
         let (_, uri) = chunk;
         let db = DatabaseConnection {
-            provider: RedisProvider
+            provider: RedisProvider,
         };
 
         let hash = make_hash(&uri).await;
@@ -121,10 +123,7 @@ impl Updater {
             Ok(false) => {}
         }
 
-        let pdf_bytes = reqwest::get(uri)
-            .await?
-            .bytes()
-            .await?;
+        let pdf_bytes = reqwest::get(uri).await?.bytes().await?;
         let pdf = lopdf::Document::load_mem(&pdf_bytes)?;
         let page_text = pdf.extract_text(&[FIRST_PAGE])?;
 

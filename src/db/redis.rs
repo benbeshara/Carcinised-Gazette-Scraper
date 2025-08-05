@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Result};
-use redis::{Connection, TypedCommands};
 use crate::db::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
+use anyhow::{anyhow, Result};
+use redis::{Connection, TypedCommands};
 
 pub struct RedisProvider;
 
@@ -25,9 +25,8 @@ impl DatabaseProvider for RedisProvider {
 
     async fn has_entry(&self, id: &str) -> Result<bool> {
         if let Ok(mut connection) = Self::connect().await {
-            let result = !(!connection
-                .exists::<String>(format!("flagged:{}", id))? && !connection
-                .exists::<String>(format!("discarded:{}", id))?);
+            let result = !(!connection.exists::<String>(format!("flagged:{}", id))?
+                && !connection.exists::<String>(format!("discarded:{}", id))?);
             return Ok(result);
         }
         Err(anyhow!("Could not check entry"))
@@ -36,7 +35,7 @@ impl DatabaseProvider for RedisProvider {
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool> {
         if let Ok(mut connection) = Self::connect().await {
             connection.set(id, value)?;
-            return Ok(true)
+            return Ok(true);
         }
         Err(anyhow!("Could not create entry"))
     }
@@ -48,12 +47,17 @@ impl DatabaseProvider for RedisProvider {
 
         if let Ok(mut connection) = Self::connect().await {
             let mut gazettes: Vec<Gazette> = vec![];
-            if let Ok(keys) = Commands::keys::<&str, Vec<String>>(&mut connection, "flagged:*"){
-                let _ = keys.into_iter().map(|key| {
-                    if let Ok(gazette) = Commands::get::<&String, Gazette>(&mut connection, &key){
-                        gazettes.push(gazette)
-                    }
-                }).collect::<Vec<_>>();
+            if let Ok(keys) = Commands::keys::<&str, Vec<String>>(&mut connection, "flagged:*") {
+                let _ = keys
+                    .into_iter()
+                    .map(|key| {
+                        if let Ok(gazette) =
+                            Commands::get::<&String, Gazette>(&mut connection, &key)
+                        {
+                            gazettes.push(gazette)
+                        }
+                    })
+                    .collect::<Vec<_>>();
             };
 
             gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));

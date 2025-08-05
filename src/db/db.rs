@@ -1,5 +1,5 @@
-use anyhow::Result;
 use crate::utils::gazette::Gazette;
+use anyhow::Result;
 
 #[async_trait::async_trait]
 pub trait DatabaseProvider {
@@ -10,11 +10,17 @@ pub trait DatabaseProvider {
     async fn fetch_entries(&self) -> Result<Vec<Gazette>>;
 }
 
-pub struct DatabaseConnection<T> where T: DatabaseProvider {
+pub struct DatabaseConnection<T>
+where
+    T: DatabaseProvider,
+{
     pub provider: T,
 }
 
-impl <T> DatabaseConnection<T> where T: DatabaseProvider {
+impl<T> DatabaseConnection<T>
+where
+    T: DatabaseProvider,
+{
     async fn connect() -> Result<T::DBResult> {
         T::connect().await
     }
