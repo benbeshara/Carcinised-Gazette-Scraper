@@ -23,7 +23,7 @@ pub trait UploadImage {
     async fn try_upload_image(&self) -> Result<Option<String>>;
 }
 
-pub async fn make_hash(key: &str) -> String {
+pub fn make_hash(key: &str) -> String {
     let mut hasher: CoreWrapper<Sha1Core> = Sha1::new();
     hasher.update(key);
     format!("{:x}", hasher.finalize())
@@ -31,7 +31,7 @@ pub async fn make_hash(key: &str) -> String {
 
 impl Save for Gazette {
     async fn save(&self) -> Result<bool> {
-        let mut hash = make_hash(&self.uri).await;
+        let mut hash = make_hash(&self.uri);
 
         if self.flagged {
             hash = format!("flagged:{}", hash);
@@ -64,7 +64,7 @@ impl UploadImage for Gazette {
         }
 
         if let Some(image) = images.first() {
-            let hash = make_hash(&self.uri).await;
+            let hash = make_hash(&self.uri);
             let filename = format!("./{}.jpg", hash);
             if std::fs::write(filename.clone(), image.content).is_ok() {
                 let client = ImgurClient::new("");

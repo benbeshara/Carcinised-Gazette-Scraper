@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.8.4"
+axum = { version = "0.8.4", features = ["macros"] }
 futures = "0.3.31"
 lopdf = "0.36.0"
 maud = { version = "0.27.0", features = ["axum"] }

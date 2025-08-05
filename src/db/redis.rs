@@ -1,3 +1,4 @@
+use std::ops::BitAnd;
 use crate::db::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};
@@ -6,6 +7,16 @@ use redis::{Connection, TypedCommands};
 pub struct RedisProvider;
 
 pub struct RedisConnection;
+
+impl RedisProvider {
+    const FLAGGED_PREFIX: &'static str = "flagged:";
+    const DISCARDED_PREFIX: &'static str = "discarded:";
+
+    pub async fn check_key_exists(connection: &mut Connection, prefix: &str, id: &str) -> Result<bool> {
+        connection.exists::<String>(format!("{}{}", prefix, id))
+            .map_err(|e| anyhow!("Failed to check Redis key: {}", e))
+    }
+}
 
 #[async_trait::async_trait]
 impl DatabaseProvider for RedisProvider {
@@ -24,12 +35,21 @@ impl DatabaseProvider for RedisProvider {
     }
 
     async fn has_entry(&self, id: &str) -> Result<bool> {
-        if let Ok(mut connection) = Self::connect().await {
-            let result = !(!connection.exists::<String>(format!("flagged:{}", id))?
-                && !connection.exists::<String>(format!("discarded:{}", id))?);
-            return Ok(result);
-        }
-        Err(anyhow!("Could not check entry"))
+        let mut connection = Self::connect().await
+            .map_err(|e| anyhow!("Failed to connect to Redis: {}", e))?;
+
+        let flagged_exists = Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id).await?;
+        let discarded_exists = Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id).await?;
+
+        let exists = flagged_exists || discarded_exists;
+
+        println!("{}", if exists {
+            format!("Found entry {}", id)
+        } else {
+            format!("Could not find entry {}", id)
+        });
+
+        Ok(exists)
     }
 
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool> {
