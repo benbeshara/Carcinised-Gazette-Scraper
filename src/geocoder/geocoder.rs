@@ -1,9 +1,9 @@
 use crate::utils::maptypes::GeoPosition;
-use crate::GenericError;
+use anyhow::Result;
 
 #[async_trait::async_trait]
 pub trait GeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition, GenericError>;
+    async fn geocode(&self, input: &String) -> Result<GeoPosition>;
 }
 
 #[derive(Clone, Debug)]
@@ -19,7 +19,7 @@ impl<T> GeocoderRequest<T>
 where
     T: GeocoderProvider + Copy,
 {
-    pub async fn geocode(&self) -> Result<GeoPosition, GenericError> {
+    pub async fn geocode(&self) -> Result<GeoPosition> {
         self.service.geocode(&self.input).await
     }
 }

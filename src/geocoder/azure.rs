@@ -1,9 +1,9 @@
 use crate::geocoder::geocoder::GeocoderProvider;
 use crate::utils::maptypes::GeoPosition;
-use crate::GenericError;
 use reqwest::Client;
 use serde::Deserialize;
 use std::env;
+use anyhow::{anyhow, Result};
 
 #[derive(Clone, Copy, Debug)]
 pub struct AzureGeocoderProvider;
@@ -28,7 +28,7 @@ struct AzureGeocoderResponse {
 
 #[async_trait::async_trait]
 impl GeocoderProvider for AzureGeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition, GenericError> {
+    async fn geocode(&self, input: &String) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("AZURE_API_KEY") {
             let client = Client::new();
             let req = format!("{}, VICTORIA, AUSTRALIA", input);
@@ -38,11 +38,11 @@ impl GeocoderProvider for AzureGeocoderProvider {
             let body = res.json::<AzureGeocoderResponse>().await?;
             return body.into();
         }
-        Err("Geocoding failed".into())
+        Err(anyhow!("Invalid Azure API key provided"))
     }
 }
 
-impl From<AzureGeocoderResponse> for Result<GeoPosition, GenericError> {
+impl From<AzureGeocoderResponse> for Result<GeoPosition> {
     fn from(value: AzureGeocoderResponse) -> Self {
         // We are *likely* to want a cross-street value
         for result in &value.results {
@@ -55,7 +55,7 @@ impl From<AzureGeocoderResponse> for Result<GeoPosition, GenericError> {
         if let Some(result) = value.results.first() {
             Ok((&result.position).into())
         } else {
-            Err("Geocoder returned no results".into())
+            Err(anyhow!("Geocoder returned no results"))
         }
     }
 }

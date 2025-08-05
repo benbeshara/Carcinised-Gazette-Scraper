@@ -1,4 +1,3 @@
-use crate::update_pdfs;
 use axum::{
     self,
     response::sse::{Event, Sse},
@@ -10,6 +9,9 @@ use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, time::Duration};
 use tokio_stream::StreamExt as _;
+use crate::db::db::DatabaseConnection;
+use crate::db::redis::RedisProvider;
+use crate::utils::updater::Updater;
 
 pub async fn start_server() {
     let app = Router::new()
@@ -28,8 +30,9 @@ pub async fn start_server() {
 }
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+    let data = send_data().await;
     let gazette_stream =
-        stream::once(async { Event::default().data(send_data().await).event("list") }).map(Ok);
+        stream::once(async { Event::default().data(data).event("list") }).map(Ok);
 
     Sse::new(gazette_stream).keep_alive(
         axum::response::sse::KeepAlive::new()
@@ -39,7 +42,11 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
 }
 
 async fn send_data() -> String {
-    tokio::spawn(async move { update_pdfs().await });
+    let mut updater = Updater {
+        uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
+        base_uri: "http://www.gazette.vic.gov.au".to_string(),
+    };
+    let _ = updater.update().await;
     format!("<ul>{}</ul>", render_list().await)
 }
 
@@ -50,7 +57,10 @@ async fn initial_list() -> Markup {
 }
 
 async fn render_list() -> String {
-    if let Ok(gazettes) = crate::retrieve_gazettes_from_redis().await {
+    let db = DatabaseConnection {
+        provider: RedisProvider
+    };
+    if let Ok(gazettes) = db.fetch_entries().await {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
             acc += html!(
                 li {
@@ -75,8 +85,8 @@ async fn render_list() -> String {
                     }
                 }
             )
-            .into_string()
-            .as_str();
+                .into_string()
+                .as_str();
 
             acc
         });

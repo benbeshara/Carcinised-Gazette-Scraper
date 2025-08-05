@@ -1,6 +1,6 @@
 use crate::geocoder::geocoder::GeocoderProvider;
 use crate::utils::maptypes::GeoPosition;
-use crate::GenericError;
+use anyhow::{anyhow, Result};
 use reqwest::Client;
 use serde::Deserialize;
 use std::env;
@@ -32,7 +32,7 @@ struct GoogleGeocoderResponse {
 
 #[async_trait::async_trait]
 impl GeocoderProvider for GoogleGeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition, GenericError> {
+    async fn geocode(&self, input: &String) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             let client = Client::new();
             let req = format!("{}, VICTORIA, AUSTRALIA", input);
@@ -42,18 +42,18 @@ impl GeocoderProvider for GoogleGeocoderProvider {
             let body = res.json::<GoogleGeocoderResponse>().await?;
             return body.into();
         }
-        Err("Geocoding failed".into())
+        Err(anyhow!("Geocoding failed"))
     }
 }
 
-impl From<GoogleGeocoderResponse> for Result<GeoPosition, GenericError> {
+impl From<GoogleGeocoderResponse> for Result<GeoPosition> {
     fn from(value: GoogleGeocoderResponse) -> Self {
         // The google geocoder seems to be good enough to get a hit on the first result,
         // but I'm not sure how i'd filter them to find relevant ones if it doesn't
         if let Some(result) = value.results.first() {
             Ok((&result.clone().geometry.location).into())
         } else {
-            Err("Geocoder returned no results".into())
+            Err(anyhow!("Geocoder returned no results"))
         }
     }
 }
