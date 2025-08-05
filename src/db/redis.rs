@@ -11,8 +11,13 @@ impl RedisProvider {
     const FLAGGED_PREFIX: &'static str = "flagged:";
     const DISCARDED_PREFIX: &'static str = "discarded:";
 
-    pub async fn check_key_exists(connection: &mut Connection, prefix: &str, id: &str) -> Result<bool> {
-        connection.exists::<String>(format!("{}{}", prefix, id))
+    pub async fn check_key_exists(
+        connection: &mut Connection,
+        prefix: &str,
+        id: &str,
+    ) -> Result<bool> {
+        connection
+            .exists::<String>(format!("{prefix}{id}"))
             .map_err(|e| anyhow!("Failed to check Redis key: {}", e))
     }
 }
@@ -34,19 +39,25 @@ impl DatabaseProvider for RedisProvider {
     }
 
     async fn has_entry(&self, id: &str) -> Result<bool> {
-        let mut connection = Self::connect().await
+        let mut connection = Self::connect()
+            .await
             .map_err(|e| anyhow!("Failed to connect to Redis: {}", e))?;
 
-        let flagged_exists = Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id).await?;
-        let discarded_exists = Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id).await?;
+        let flagged_exists =
+            Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id).await?;
+        let discarded_exists =
+            Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id).await?;
 
         let exists = flagged_exists || discarded_exists;
 
-        println!("{}", if exists {
-            format!("Found entry {}", id)
-        } else {
-            format!("Could not find entry {}", id)
-        });
+        println!(
+            "{}",
+            if exists {
+                format!("Found entry {id}")
+            } else {
+                format!("Could not find entry {id}")
+            }
+        );
 
         Ok(exists)
     }

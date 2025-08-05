@@ -1,6 +1,6 @@
 use crate::db::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
-use crate::utils::gazette::{make_hash, Gazette, Save, UploadImage};
+use crate::utils::gazette::{make_hash, Gazette};
 use anyhow::Result;
 use futures::stream::StreamExt;
 use itertools::Itertools;
@@ -23,18 +23,16 @@ impl Updater {
         let filtered_results = futures::stream::iter(results)
             .map(|result| async {
                 let (_, uri) = &result;
-                let hash = make_hash(&uri);
+                let hash = make_hash(uri);
                 let db = DatabaseConnection {
                     provider: RedisProvider,
                 };
 
                 match db.has_entry(&hash).await {
-                    Ok(false) => {
-                        match self.filter_result(&result).await {
-                            Ok(is_flagged) => Some((result, is_flagged)),
-                            Err(_) => None,
-                        }
-                    }
+                    Ok(false) => match self.filter_result(&result).await {
+                        Ok(is_flagged) => Some((result, is_flagged)),
+                        Err(_) => None,
+                    },
                     _ => None,
                 }
             })
@@ -53,7 +51,7 @@ impl Updater {
                 title: Some(title),
                 img_uri: None,
                 flagged: true,
-                polygon: None
+                polygon: None,
             };
 
             if let Ok(img) = gazette.try_upload_image().await {
@@ -74,16 +72,16 @@ impl Updater {
                 title: Some(title),
                 img_uri: None,
                 flagged: false,
-                polygon: None
+                polygon: None,
             };
 
             let _ = gazette.save().await;
         });
 
         let (flagged_uris, _) = tokio::join!(
-        futures::future::join_all(flagged_futures),
-        futures::future::join_all(discarded_futures)
-    );
+            futures::future::join_all(flagged_futures),
+            futures::future::join_all(discarded_futures)
+        );
 
         println!("PDF Update Complete");
         Ok(flagged_uris)

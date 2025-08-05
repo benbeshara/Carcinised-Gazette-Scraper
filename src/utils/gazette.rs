@@ -1,15 +1,15 @@
 use crate::db::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
+use crate::geocoder::geocoder::GeocoderRequest;
+use crate::geocoder::google::GoogleGeocoderProvider;
+use crate::location_parser::location_parser::LocationParser;
+use crate::location_parser::openai::OpenAI;
+use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
 use imgurs::ImgurClient;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use serde::{Deserialize, Serialize};
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
-use crate::geocoder::geocoder::GeocoderRequest;
-use crate::geocoder::google::GoogleGeocoderProvider;
-use crate::location_parser::location_parser::LocationParser;
-use crate::location_parser::openai::OpenAI;
-use crate::utils::maptypes::{GeoPosition, MapPolygon, Sanitise};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
@@ -19,14 +19,6 @@ pub struct Gazette {
     pub img_uri: Option<String>,
     pub flagged: bool,
     pub polygon: Option<MapPolygon>,
-}
-
-pub trait Save {
-    async fn save(&self) -> Result<bool>;
-}
-
-pub trait UploadImage {
-    async fn try_upload_image(&self) -> Result<Option<String>>;
 }
 
 pub fn make_hash(key: &str) -> String {
@@ -40,9 +32,9 @@ impl Gazette {
         let mut hash = make_hash(&self.uri);
 
         if self.flagged {
-            hash = format!("flagged:{}", hash);
+            hash = format!("flagged:{hash}");
         } else {
-            hash = format!("discarded:{}", hash);
+            hash = format!("discarded:{hash}");
         }
 
         let db = DatabaseConnection {
@@ -69,7 +61,7 @@ impl Gazette {
 
         if let Some(image) = images.first() {
             let hash = make_hash(&self.uri);
-            let filename = format!("./{}.jpg", hash);
+            let filename = format!("./{hash}.jpg");
             if std::fs::write(filename.clone(), image.content).is_ok() {
                 let client = ImgurClient::new("");
                 let result = client.upload_image(&filename).await;
@@ -78,7 +70,6 @@ impl Gazette {
                     Err(e) => Err(e.into()),
                 }
             } else {
-                println!("Could not write image {}", filename);
                 Err(anyhow!("Could not upload image"))
             }
         } else {
@@ -96,25 +87,19 @@ impl Gazette {
             if let Ok(page_text) = &mut pdf.extract_text(&[page.0]) {
                 let loc = LocationParser {
                     provider: OpenAI,
-                    locations: page_text.to_owned()
+                    locations: page_text.to_owned(),
                 };
                 if let Ok(places) = loc.parse_locations().await {
                     let futures = places.into_iter().map(|place| async move {
                         let gc = GeocoderRequest {
                             service: GoogleGeocoderProvider,
-                            input: place
+                            input: place,
                         };
-                        let pos = gc.geocode().await.unwrap_or_default();
-                        GeoPosition {
-                            latitude: pos.latitude.clone(),
-                            longitude: pos.longitude.clone()
-                        }
+                        gc.geocode().await.unwrap_or_default()
                     });
                     let mut polygon = futures::future::join_all(futures).await;
                     polygon.sanitise();
-                    return Ok(Some(MapPolygon {
-                        data: polygon
-                    }));
+                    return Ok(Some(MapPolygon { data: polygon }));
                 }
             }
         }

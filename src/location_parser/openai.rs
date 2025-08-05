@@ -55,7 +55,7 @@ impl LocationParserService for OpenAI {
 
         res.json::<OpenAIResponse>()
             .await
-            .and_then(|r| Ok(r.into()))
+            .map(|r| r.into())
             .map_err(Into::into)
     }
 }
