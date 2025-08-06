@@ -1,11 +1,9 @@
-use crate::db::db::DatabaseProvider;
+use crate::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};
 use redis::{Connection, TypedCommands};
 
 pub struct RedisProvider;
-
-pub struct RedisConnection;
 
 impl RedisProvider {
     const FLAGGED_PREFIX: &'static str = "flagged:";

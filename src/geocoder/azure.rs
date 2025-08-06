@@ -1,34 +1,34 @@
-use crate::geocoder::geocoder::GeocoderProvider;
+use crate::geocoder::GeocoderProvider;
 use crate::utils::maptypes::GeoPosition;
 use anyhow::{anyhow, Result};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 
 #[derive(Clone, Copy, Debug)]
 pub struct AzureGeocoderProvider;
 
-#[derive(Deserialize, Copy, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub struct AzureGeocoderPosition {
     pub lat: f64,
     pub lon: f64,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct AzureGeocoderResult {
     id: String,
     r#type: String,
     position: AzureGeocoderPosition,
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 struct AzureGeocoderResponse {
     results: Vec<AzureGeocoderResult>,
 }
 
 #[async_trait::async_trait]
 impl GeocoderProvider for AzureGeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition> {
+    async fn geocode(&self, input: &str) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("AZURE_API_KEY") {
             let client = Client::new();
             let req = format!("{input}, VICTORIA, AUSTRALIA");

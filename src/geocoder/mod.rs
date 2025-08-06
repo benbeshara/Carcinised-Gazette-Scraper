@@ -1,3 +1,7 @@
 pub mod azure;
-pub mod geocoder;
+pub mod core;
 pub mod google;
+
+use core::*;
+
+pub use core::GeocoderRequest;

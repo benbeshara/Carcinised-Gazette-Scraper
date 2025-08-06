@@ -1,9 +1,8 @@
-use crate::db::db::DatabaseConnection;
+use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
 use crate::utils::gazette::{make_hash, Gazette};
 use anyhow::Result;
 use futures::stream::StreamExt;
-use itertools::Itertools;
 use select::document::Document;
 use select::predicate::Name;
 

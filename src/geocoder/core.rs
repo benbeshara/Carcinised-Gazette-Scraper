@@ -3,7 +3,7 @@ use anyhow::Result;
 
 #[async_trait::async_trait]
 pub trait GeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition>;
+    async fn geocode(&self, input: &str) -> Result<GeoPosition>;
 }
 
 #[derive(Clone, Debug)]

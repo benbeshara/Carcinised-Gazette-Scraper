@@ -21,10 +21,6 @@ impl<T> DatabaseConnection<T>
 where
     T: DatabaseProvider,
 {
-    async fn connect() -> Result<T::DBResult> {
-        T::connect().await
-    }
-
     pub async fn has_entry(&self, id: &str) -> Result<bool> {
         T::has_entry(&self.provider, id).await
     }

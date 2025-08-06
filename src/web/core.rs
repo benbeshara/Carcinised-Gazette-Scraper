@@ -1,4 +1,4 @@
-use crate::db::db::DatabaseConnection;
+use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
 use crate::utils::updater::Updater;
 use axum::{
@@ -53,6 +53,25 @@ async fn initial_list() -> Markup {
     html! {
         (PreEscaped(render_list().await))
     }
+}
+
+async fn fetch_polygons() -> String {
+    let db = DatabaseConnection {
+        provider: RedisProvider,
+    };
+    if let Ok(gazettes) = db.fetch_entries().await {
+        let acc = gazettes.iter().fold(Vec::new(), |mut acc, gazette| {
+            if let Some(polygon) = &gazette.polygon {
+                let p = polygon.convex_hull();
+                acc.push(p.to_string());
+                acc
+            } else {
+                acc
+            }
+        });
+        return acc.join(",").to_string();
+    }
+    "[]".to_string()
 }
 
 async fn render_list() -> String {
@@ -120,14 +139,18 @@ async fn landing() -> Markup {
                     div #map{}
 
                     script {
-                        "var map = L.map('map').setView([-37.81400000,  144.96332000], 13);
+                        "let map = L.map('map').setView([-37.81400000,  144.96332000], 13);
                         L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
                             maxZoom: 19,
-                            attribution: '&copy; <a href=\"http://www.openstreetmap.org/copyright\">OpenStreetMap</a>'
                         }).addTo(map);
-                        var polygon = L.polygon([
-                           [-37.8378228, 144.9429777], [-37.8368427, 144.9279877], [-37.8420372, 144.9392338], [-37.8378228, 144.9429777]
-                        ]).addTo(map);"
+                        let drawnItems = new L.FeatureGroup();
+                        map.addLayer(drawnItems);"
+                        "let polygons = ["
+                        ((fetch_polygons().await))
+                        "];"
+                        "polygons.forEach(function(polygon) {
+                            var polygon = L.polygon(polygon).addTo(map);
+                        });"
                     }
                     ul hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
                             span hx-swap="innerHTML" sse-swap="heartbeat" {

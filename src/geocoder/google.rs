@@ -1,25 +1,25 @@
-use crate::geocoder::geocoder::GeocoderProvider;
+use crate::geocoder::GeocoderProvider;
 use crate::utils::maptypes::GeoPosition;
 use anyhow::{anyhow, Result};
 use reqwest::Client;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::env;
 
 #[derive(Clone, Copy, Debug)]
 pub struct GoogleGeocoderProvider;
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct GoogleGeocoderPosition {
     pub lat: f64,
     pub lng: f64,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct GoogleGeocoderGeometry {
     location: GoogleGeocoderPosition,
 }
 
-#[derive(Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 struct GoogleGeocoderResult {
     geometry: GoogleGeocoderGeometry,
     types: Vec<String>,
@@ -32,7 +32,7 @@ struct GoogleGeocoderResponse {
 
 #[async_trait::async_trait]
 impl GeocoderProvider for GoogleGeocoderProvider {
-    async fn geocode(&self, input: &String) -> Result<GeoPosition> {
+    async fn geocode(&self, input: &str) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             let client = Client::new();
             let req = format!("{input}, VICTORIA, AUSTRALIA");

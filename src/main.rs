@@ -5,7 +5,7 @@ mod utils;
 mod web;
 
 use utils::updater::Updater;
-use web::web::start_server;
+use web::start_server;
 
 #[tokio::main]
 async fn main() {

@@ -1,9 +1,8 @@
-use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::fmt::{Display, Formatter};
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Default, Serialize, Deserialize)]
 pub struct GeoPosition {
     pub latitude: f64,
     pub longitude: f64,
@@ -32,6 +31,104 @@ impl From<MapPolygon> for String {
     }
 }
 
+impl MapPolygon {
+    fn center(&self) -> GeoPosition {
+        let count = self.data.len() as f64;
+        let sum = self.data.iter().fold(
+            GeoPosition {
+                latitude: 0.0,
+                longitude: 0.0,
+            },
+            |mut acc, pos| {
+                acc.latitude += pos.latitude;
+                acc.longitude += pos.longitude;
+                acc
+            },
+        );
+
+        GeoPosition {
+            latitude: sum.latitude / count,
+            longitude: sum.longitude / count,
+        }
+    }
+
+    fn n_furthest_points(&self, n: usize) -> Vec<GeoPosition> {
+        let center = self.center();
+        let mut points = self.data.clone();
+
+        points.sort_by(|a, b| {
+            let dist_a = center.distance_to(a);
+            let dist_b = center.distance_to(b);
+            dist_b
+                .partial_cmp(&dist_a)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        });
+
+        points.into_iter().take(n).collect()
+    }
+
+    pub fn approx_bounds(&mut self) -> Vec<GeoPosition> {
+        if self.data.len() < 5 {
+            return self.data.clone();
+        }
+        self.n_furthest_points(5)
+    }
+
+    pub fn convex_hull(&self) -> Self {
+        let points = self.data.clone();
+        if points.len() < 3 {
+            return MapPolygon {
+                data: points.to_vec(),
+            };
+        }
+
+        let mut bottom_point = 0;
+        for i in 1..points.len() {
+            if points[i].latitude < points[bottom_point].latitude
+                || (points[i].latitude == points[bottom_point].latitude
+                    && points[i].longitude < points[bottom_point].longitude)
+            {
+                bottom_point = i;
+            }
+        }
+
+        let mut hull_points: Vec<(f64, GeoPosition)> = points
+            .iter()
+            .enumerate()
+            .filter(|&(i, _)| i != bottom_point)
+            .map(|(_, p)| {
+                let dx = p.longitude - points[bottom_point].longitude;
+                let dy = p.latitude - points[bottom_point].latitude;
+                let angle = (dy).atan2(dx);
+                (angle, p.clone())
+            })
+            .collect();
+
+        hull_points.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
+
+        let mut hull = vec![points[bottom_point].clone()];
+
+        for (_angle, point) in hull_points {
+            while hull.len() >= 2 {
+                let next_to_top = &hull[hull.len() - 2];
+                let top = &hull[hull.len() - 1];
+
+                if GeoPosition::orientation(next_to_top, top, &point) > 0.0 {
+                    break;
+                }
+                hull.pop();
+            }
+            hull.push(point);
+        }
+
+        if !hull.is_empty() && hull[0] != *hull.last().unwrap() {
+            hull.push(hull[0].clone());
+        }
+
+        MapPolygon { data: hull }
+    }
+}
+
 impl Display for MapPolygon {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(
@@ -56,6 +153,27 @@ impl Sanitise for Vec<GeoPosition> {
             victoria_lat_range.contains(&point.latitude)
                 && victoria_lon_range.contains(&point.longitude)
         });
+    }
+}
+
+impl GeoPosition {
+    fn distance_to(&self, other: &GeoPosition) -> f64 {
+        let r = 6371.0; // Earth's radius in kilometers
+
+        let d_lat = (other.latitude - self.latitude).to_radians();
+        let d_lng = (other.longitude - self.longitude).to_radians();
+        let lat1 = self.latitude.to_radians();
+        let lat2 = other.latitude.to_radians();
+
+        let a = (d_lat / 2.0).sin().powi(2) + lat1.cos() * lat2.cos() * (d_lng / 2.0).sin().powi(2);
+        let c = 2.0 * a.sqrt().asin();
+
+        r * c
+    }
+
+    fn orientation(p: &GeoPosition, q: &GeoPosition, r: &GeoPosition) -> f64 {
+        (q.longitude - p.longitude) * (r.latitude - p.latitude)
+            - (q.latitude - p.latitude) * (r.longitude - p.longitude)
     }
 }
 

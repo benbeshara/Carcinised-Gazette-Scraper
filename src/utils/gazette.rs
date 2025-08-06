@@ -1,8 +1,8 @@
-use crate::db::db::DatabaseConnection;
+use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
-use crate::geocoder::geocoder::GeocoderRequest;
+use crate::geocoder::GeocoderRequest;
 use crate::geocoder::google::GoogleGeocoderProvider;
-use crate::location_parser::location_parser::LocationParser;
+use crate::location_parser::LocationParser;
 use crate::location_parser::openai::OpenAI;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
