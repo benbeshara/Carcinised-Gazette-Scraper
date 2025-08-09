@@ -1,5 +1,5 @@
-use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
+use crate::db::DatabaseConnection;
 use crate::utils::gazette::{make_hash, Gazette};
 use anyhow::Result;
 use futures::stream::StreamExt;

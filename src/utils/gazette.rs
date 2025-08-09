@@ -1,9 +1,9 @@
-use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
-use crate::geocoder::GeocoderRequest;
+use crate::db::DatabaseConnection;
 use crate::geocoder::google::GoogleGeocoderProvider;
-use crate::location_parser::LocationParser;
+use crate::geocoder::GeocoderRequest;
 use crate::location_parser::openai::OpenAI;
+use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
 use imgurs::ImgurClient;

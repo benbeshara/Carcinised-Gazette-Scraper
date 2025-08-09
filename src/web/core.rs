@@ -1,6 +1,14 @@
-use crate::db::DatabaseConnection;
 use crate::db::redis::RedisProvider;
+use crate::db::DatabaseConnection;
+use crate::utils::geojson::{
+    GeoJsonFeature, GeoJsonFeatureCollection, GeoJsonGeometry, GeoJsonProperties,
+};
 use crate::utils::updater::Updater;
+use crate::web::templates::base::base_template;
+use crate::web::templates::components::{
+    footer_section, header_section, list_section, map_section, notice_section,
+};
+use crate::web::templates::styles::get_styles;
 use axum::{
     self,
     response::sse::{Event, Sse},
@@ -31,9 +39,16 @@ pub async fn start_server() {
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let data = send_data().await;
-    let gazette_stream = stream::once(async { Event::default().data(data).event("list") }).map(Ok);
+    let polygons = fetch_polygons().await;
+    let circles = fetch_circles().await;
+    let stream = stream::iter([
+        Event::default().data(data).event("list"),
+        Event::default().data(circles).event("circles"),
+        Event::default().data(polygons).event("close"),
+    ])
+    .map(Ok);
 
-    Sse::new(gazette_stream).keep_alive(
+    Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(1))
             .text("keep-alive-text"),
@@ -60,16 +75,82 @@ async fn fetch_polygons() -> String {
         provider: RedisProvider,
     };
     if let Ok(gazettes) = db.fetch_entries().await {
-        let acc = gazettes.iter().fold(Vec::new(), |mut acc, gazette| {
+        let mut feature_collection = GeoJsonFeatureCollection::new();
+
+        for gazette in gazettes {
             if let Some(polygon) = &gazette.polygon {
-                let p = polygon.convex_hull();
-                acc.push(p.to_string());
-                acc
-            } else {
-                acc
+                let processed_polygon = polygon
+                    .clone()
+                    .remove_isolated_points(5.0, 2)
+                    .remove_identical_points()
+                    .convex_hull();
+
+                // Convert polygon data to GeoJSON format
+                let coordinates = vec![processed_polygon
+                    .data
+                    .iter()
+                    .map(|point| [point.longitude, point.latitude])
+                    .collect::<Vec<[f64; 2]>>()];
+
+                let feature = GeoJsonFeature {
+                    type_field: "Feature".to_string(),
+                    geometry: GeoJsonGeometry::Polygon {
+                        coordinates,
+                    },
+                    properties: GeoJsonProperties {
+                        title: gazette.title,
+                        uri: gazette.uri,
+                        img_uri: gazette.img_uri,
+                    },
+                };
+
+                feature_collection.features.push(feature);
             }
-        });
-        return acc.join(",").to_string();
+        }
+
+        return serde_json::to_string(&feature_collection).unwrap_or_else(|_| "{}".to_string());
+    }
+    "[]".to_string()
+}
+
+async fn fetch_circles() -> String {
+    let db = DatabaseConnection {
+        provider: RedisProvider,
+    };
+    if let Ok(gazettes) = db.fetch_entries().await {
+        let mut feature_collection = GeoJsonFeatureCollection::new();
+
+        for gazette in gazettes {
+            if let Some(polygon) = &gazette.polygon {
+                let processed_polygon = polygon
+                    .to_owned()
+                    .remove_identical_points()
+                    .remove_isolated_points(2.5, 2) // these numbers are a best-guess and should be tweaked over time
+                    .clone();
+
+                if processed_polygon.data.len() == 2 {
+                    let coordinates = processed_polygon
+                        .centre()
+                        .into();
+
+                    let feature = GeoJsonFeature {
+                        type_field: "Feature".to_string(),
+                        geometry: GeoJsonGeometry::Point {
+                            coordinates
+                        },
+                        properties: GeoJsonProperties {
+                            title: gazette.title,
+                            uri: gazette.uri,
+                            img_uri: gazette.img_uri,
+                        },
+                    };
+
+                    feature_collection.features.push(feature);
+                }
+            }
+        }
+
+        return serde_json::to_string(&feature_collection).unwrap_or_else(|_| "{}".to_string());
     }
     "[]".to_string()
 }
@@ -114,168 +195,36 @@ async fn render_list() -> String {
 }
 
 async fn landing() -> Markup {
-    html! {
-        (maud::DOCTYPE)
-        html {
-            head {
-                title {
-                    "Control of Weapons Acts"
-                }
-                meta name="viewport" content="width=device-width";
-                link rel="icon" type="image/x-icon" href="favicon.ico";
-                script type="text/javascript" src="https://unpkg.com/htmx.org@2.0.0-beta3"{}
-                script type="text/javascript" src="https://unpkg.com/htmx-ext-sse@2.1.0/sse.js"{}
-                link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="";
-                script type="text/javascript" src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""{}
-            }
-            body {
-                div.center {
-                    span.heading {
-                        "Control of Weapons Act Notices"
-                    }
-                    span.subheading {
-                        "Gazettes sourced from the Victorian Gazette website"
-                    }
-                    div #map{}
+    let initial_polygons = fetch_polygons().await;
+    let initial_circles = fetch_circles().await;
+    let initial_list_content = initial_list().await;
 
-                    script {
-                        "let map = L.map('map').setView([-37.81400000,  144.96332000], 13);
-                        L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                            maxZoom: 19,
-                        }).addTo(map);
-                        let drawnItems = new L.FeatureGroup();
-                        map.addLayer(drawnItems);"
-                        "let polygons = ["
-                        ((fetch_polygons().await))
-                        "];"
-                        "polygons.forEach(function(polygon) {
-                            var polygon = L.polygon(polygon).addTo(map);
-                        });"
-                    }
-                    ul hx-ext="sse" sse-connect="/data" sse-close="close" sse-swap="list" hx-swap="outerHTML" {
-                            span hx-swap="innerHTML" sse-swap="heartbeat" {
-                        li.notice  {
-                                "Entries are refreshing server-side in the background - if you have Javascript disabled (this is smart!), you'll need to refresh this page to see latest entries. Otherwise this message will clear when refreshing has completed."
-                            }
-                        }
-                        ((initial_list().await))
-                    }
-                    a class="attribution" href="https://github.com/benbeshara/Carcinised-Gazette-Scraper" target="_blank" {
-                        "Source available here under the permissive AGPL-3.0 license"
-                    }
-                }
-                (stylesheet())
-            }
+    base_template(html! {
+        div.center {
+            (header_section())
+            (notice_section())
+            (map_section())
+            (list_section(initial_list_content))
+            (footer_section())
         }
-    }
+        (get_styles())
+        (map_javascript(&initial_polygons, &initial_circles))
+    })
 }
 
-fn stylesheet() -> Markup {
-    html!(
-    style {
-        "html {
-                background-color: #225;
-                color: #ccc;
-                font-family: sans-serif;
-            }
-            div.center {
-                margin: auto;
-                width: 60%;
-            }
-            span.heading {
-                font-size: 1.8rem;
-                display: block;
-                margin-top: 1rem;
-            }
-            span.subheading {
-                font-size: 1.4rem;
-                display: block;
-                word-wrap: break-word;
-                white-space: normal;
-                margin-bottom: 1rem;
-            }
-            div#map {
-                height: 600px;
-            }
-            span.uri {
-                font-size: 0.9rem;
-                color: #aaa;
-                display: block;
-                word-wrap: break-word;
-            }
-            a {
-                color: #ccc;
-                text-decoration: none;
-                font-size: 1.2rem;
-            }
-            ul {
-                margin: 0;
-                padding: 0;
-                list-style-type: none;
-            }
-            li {
-                padding: 0.5em 1rem;
-                margin: 0 -1rem;
-                display: flex;
-                flex-direction: row;
-                justify-content: space-between;
-                align-items: center;
-            }
-            li div {
-                flex-shrink: 3;
-            }
-            li div.thumbnail {
-                height: 128px;
-                width: 128px;
-            }
-            li div.thumbnail a img {
-                height: 128px;
-                width: 128px
-            }
-            li:hover {
-                background-color: #447;
-            }
-            li:nth-child(2n) {
-                background-color: #114;
-            }
-            li:nth-child(2n):hover {
-                background-color: #225;
-            }
-            .attribution {
-                margin: 1rem 0;
-                font-size: 0.65rem;
-                display: block;
-            }
-            @media (max-width: 430px) {
-                div.center {
-                    width: 95%;
-                }
-                span.uri {
-                    font-size: 1rem;
-                    padding-top: 0.5rem;
-                }
-                a {
-                    font-size: 1.4rem;
-                }
-                li {
-                    padding: 1rem;
-                    margin: 0;
-                    background-color: #336;
-                    display: block;
-                    text-align: justify;
-                }
-                li div.thumbnail {
-                    height: 96px;
-                    width: 100%;
-                }
-                li div.thumbnail a img {
-                    height: 96px;
-                    width: 100%;
-                }
-                .attribution {
-                    font-size: 0.8rem;
-                }
-            }"
+fn map_javascript(initial_polygons: &str, initial_circles: &str) -> Markup {
+    html! {
+        script {
+            (PreEscaped(include_str!("js/map-init.js")))
+            (PreEscaped(include_str!("js/update-functions.js")))
+            (PreEscaped(format!(
+                "let initialPolygons = {};
+                let initialCircles = {};
+                updatePolygons(initialPolygons);
+                updateCircles(initialCircles);",
+                initial_polygons, initial_circles
+            )))
+            (PreEscaped(include_str!("js/event-source.js")))
         }
-    )
+    }
 }

@@ -32,7 +32,7 @@ impl From<MapPolygon> for String {
 }
 
 impl MapPolygon {
-    fn center(&self) -> GeoPosition {
+    pub fn centre(&self) -> GeoPosition {
         let count = self.data.len() as f64;
         let sum = self.data.iter().fold(
             GeoPosition {
@@ -50,28 +50,6 @@ impl MapPolygon {
             latitude: sum.latitude / count,
             longitude: sum.longitude / count,
         }
-    }
-
-    fn n_furthest_points(&self, n: usize) -> Vec<GeoPosition> {
-        let center = self.center();
-        let mut points = self.data.clone();
-
-        points.sort_by(|a, b| {
-            let dist_a = center.distance_to(a);
-            let dist_b = center.distance_to(b);
-            dist_b
-                .partial_cmp(&dist_a)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        points.into_iter().take(n).collect()
-    }
-
-    pub fn approx_bounds(&mut self) -> Vec<GeoPosition> {
-        if self.data.len() < 5 {
-            return self.data.clone();
-        }
-        self.n_furthest_points(5)
     }
 
     pub fn convex_hull(&self) -> Self {
@@ -126,6 +104,94 @@ impl MapPolygon {
         }
 
         MapPolygon { data: hull }
+    }
+
+    pub fn remove_outliers_by_proximity(&mut self, threshold: f64, buffer_km: f64) -> &mut Self {
+        if self.data.len() < 4 {
+            return self;
+        }
+
+        let nearest_distances: Vec<f64> = self
+            .data
+            .iter()
+            .map(|point| {
+                self.data
+                    .iter()
+                    .filter(|&other| other != point)
+                    .map(|other| point.distance_to(other))
+                    .min_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
+                    .unwrap_or(f64::MAX)
+            })
+            .collect();
+
+        let mean_distance = nearest_distances.iter().sum::<f64>() / nearest_distances.len() as f64;
+
+        let variance: f64 = nearest_distances
+            .iter()
+            .map(|&d| (d - mean_distance).powi(2))
+            .sum::<f64>()
+            / nearest_distances.len() as f64;
+        let std_dev = variance.sqrt();
+
+        let filtered_data: Vec<GeoPosition> = self
+            .data
+            .iter()
+            .zip(nearest_distances.iter())
+            .filter(|(_, &distance)| {
+                if distance <= buffer_km {
+                    return true;
+                }
+                let z_score = (distance - mean_distance).abs() / std_dev;
+                z_score <= threshold
+            })
+            .map(|(pos, _)| pos.clone())
+            .collect();
+
+        self.data = filtered_data;
+        self
+    }
+
+    pub fn remove_isolated_points(&mut self, distance_km: f64, min_neighbours: usize) -> &mut Self {
+        if self.data.len() < 4 {
+            return self;
+        }
+
+        let filtered_data: Vec<GeoPosition> = self
+            .data
+            .iter()
+            .filter(|&point| {
+                let neighbour_count = self
+                    .data
+                    .iter()
+                    .filter(|&other| other != point && point.distance_to(other) <= distance_km)
+                    .count();
+                neighbour_count >= min_neighbours
+            })
+            .cloned()
+            .collect();
+
+        self.data = filtered_data;
+        self
+    }
+
+    pub fn remove_identical_points(&mut self) -> &mut Self {
+        if self.data.len() < 3 {
+            return self;
+        }
+
+        let mut filtered_data: Vec<GeoPosition> = Vec::new();
+
+        for point in self.data.iter() {
+            if !filtered_data
+                .iter()
+                .any(|p| p.latitude == point.latitude && p.longitude == point.longitude)
+            {
+                filtered_data.push(point.clone());
+            }
+        }
+
+        self.data = filtered_data;
+        self
     }
 }
 
