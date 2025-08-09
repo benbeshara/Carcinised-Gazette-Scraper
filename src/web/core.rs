@@ -92,6 +92,17 @@ async fn fetch_polygons() -> String {
                     .map(|point| [point.longitude, point.latitude])
                     .collect::<Vec<[f64; 2]>>()];
 
+                let mut start = String::new();
+                let mut end = String::new();
+
+                if let Some(start_date) = &gazette.start {
+                    start = start_date.format("%Y-%m-%d").to_string();
+                }
+
+                if let Some(end_date) = &gazette.end {
+                    end = end_date.format("%Y-%m-%d").to_string();
+                }
+
                 let feature = GeoJsonFeature {
                     type_field: "Feature".to_string(),
                     geometry: GeoJsonGeometry::Polygon { coordinates },
@@ -99,6 +110,8 @@ async fn fetch_polygons() -> String {
                         title: gazette.title,
                         uri: gazette.uri,
                         img_uri: gazette.img_uri,
+                        start,
+                        end
                     },
                 };
 
@@ -129,6 +142,17 @@ async fn fetch_circles() -> String {
                 if processed_polygon.data.len() == 2 {
                     let coordinates = processed_polygon.centre().into();
 
+                    let mut start = String::new();
+                    let mut end = String::new();
+
+                    if let Some(start_date) = &gazette.start {
+                        start = start_date.format("%Y-%m-%d").to_string();
+                    }
+
+                    if let Some(end_date) = &gazette.end {
+                        end = end_date.format("%Y-%m-%d").to_string();
+                    }
+
                     let feature = GeoJsonFeature {
                         type_field: "Feature".to_string(),
                         geometry: GeoJsonGeometry::Point { coordinates },
@@ -136,6 +160,8 @@ async fn fetch_circles() -> String {
                             title: gazette.title,
                             uri: gazette.uri,
                             img_uri: gazette.img_uri,
+                            start,
+                            end,
                         },
                     };
 

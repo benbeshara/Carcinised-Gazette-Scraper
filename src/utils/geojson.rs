@@ -30,6 +30,8 @@ pub struct GeoJsonProperties {
     pub title: Option<String>,
     pub uri: String,
     pub img_uri: Option<String>,
+    pub start: String,
+    pub end: String,
 }
 
 impl GeoJsonFeatureCollection {

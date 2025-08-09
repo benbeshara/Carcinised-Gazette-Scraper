@@ -5,9 +5,27 @@ function updatePolygons(geojsonData) {
     currentPolygons = [];
 
     L.geoJSON(geojsonData, {
-        style: function() {
+        style: function(feature) {
+            let start = Date.parse(feature.properties.start);
+            let end = Date.parse(feature.properties.end);
+            let date = Date.now()
+
+            if((start < date < end) || (date === start)){
+                return {
+                    color: '#ff0000',
+                    weight: 2,
+                    opacity: 0.65
+                }
+            }
+            if(date > end){
+                return {
+                    color: '#4444ff',
+                    weight: 2,
+                    opacity: 0.25
+                }
+            }
             return {
-                color: '#ff7800',
+                color: '#ffec16',
                 weight: 2,
                 opacity: 0.65
             };
@@ -41,9 +59,27 @@ function updateCircles(geojsonData) {
         pointToLayer: (feature, latlng) => {
             return new L.Circle(latlng, {radius: 500});
         },
-        style: function() {
+        style: function(feature) {
+            let start = Date.parse(feature.properties.start);
+            let end = Date.parse(feature.properties.end);
+            let date = Date.now()
+
+            if((start < date < end) || (date === start)){
+                return {
+                    color: '#ff0000',
+                    weight: 2,
+                    opacity: 0.65
+                }
+            }
+            if(date > end){
+                return {
+                    color: '#4444ff',
+                    weight: 2,
+                    opacity: 0.25
+                }
+            }
             return {
-                color: '#ff7800',
+                color: '#ffec16',
                 weight: 2,
                 opacity: 0.65
             };
