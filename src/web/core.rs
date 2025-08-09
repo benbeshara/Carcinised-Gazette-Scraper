@@ -94,9 +94,7 @@ async fn fetch_polygons() -> String {
 
                 let feature = GeoJsonFeature {
                     type_field: "Feature".to_string(),
-                    geometry: GeoJsonGeometry::Polygon {
-                        coordinates,
-                    },
+                    geometry: GeoJsonGeometry::Polygon { coordinates },
                     properties: GeoJsonProperties {
                         title: gazette.title,
                         uri: gazette.uri,
@@ -129,15 +127,11 @@ async fn fetch_circles() -> String {
                     .clone();
 
                 if processed_polygon.data.len() == 2 {
-                    let coordinates = processed_polygon
-                        .centre()
-                        .into();
+                    let coordinates = processed_polygon.centre().into();
 
                     let feature = GeoJsonFeature {
                         type_field: "Feature".to_string(),
-                        geometry: GeoJsonGeometry::Point {
-                            coordinates
-                        },
+                        geometry: GeoJsonGeometry::Point { coordinates },
                         properties: GeoJsonProperties {
                             title: gazette.title,
                             uri: gazette.uri,

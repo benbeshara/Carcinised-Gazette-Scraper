@@ -17,7 +17,9 @@ tokio-stream = "0.1.17"
 imgurs = "0.11.2"
 redis-macros = "0.5.1"
 serde = { version = "1.0", features = ["derive"] }
+serde_with = {  version = "3.14.0", features = ["chrono"] }
 serde_json = { version = "1.0" }
-itertools = "0.14.0"
 async-trait = "0.1.83"
 anyhow = "1.0.98"
+chrono = "0.4.38"
+regex = "1.11.1"

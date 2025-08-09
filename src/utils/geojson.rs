@@ -1,17 +1,13 @@
-use serde::Serialize;
 use crate::utils::maptypes::GeoPosition;
+use serde::Serialize;
 
 #[derive(Serialize)]
 #[serde(tag = "type")]
 pub enum GeoJsonGeometry {
     #[serde(rename = "Point")]
-    Point {
-        coordinates: [f64; 2]
-    },
+    Point { coordinates: [f64; 2] },
     #[serde(rename = "Polygon")]
-    Polygon {
-        coordinates: Vec<Vec<[f64; 2]>>
-    }
+    Polygon { coordinates: Vec<Vec<[f64; 2]>> },
 }
 
 #[derive(Serialize)]

@@ -6,9 +6,13 @@ use crate::location_parser::openai::OpenAI;
 use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
+use chrono::NaiveDate;
 use imgurs::ImgurClient;
+use lopdf::Document;
 use redis_macros::{FromRedisValue, ToRedisArgs};
+use regex::Regex;
 use serde::{Deserialize, Serialize};
+use serde_with::chrono;
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
@@ -19,6 +23,8 @@ pub struct Gazette {
     pub img_uri: Option<String>,
     pub flagged: bool,
     pub polygon: Option<MapPolygon>,
+    pub start: Option<NaiveDate>,
+    pub end: Option<NaiveDate>,
 }
 
 pub fn make_hash(key: &str) -> String {
@@ -28,6 +34,12 @@ pub fn make_hash(key: &str) -> String {
 }
 
 impl Gazette {
+    async fn get_pdf(&self) -> Result<Document> {
+        let req = reqwest::get(&self.uri).await?;
+        let bytes = req.bytes().await?;
+        Document::load_mem(&bytes).map_err(|e| e.into())
+    }
+
     pub(crate) async fn save(&self) -> Result<bool> {
         let mut hash = make_hash(&self.uri);
 
@@ -49,9 +61,7 @@ impl Gazette {
     pub(crate) async fn try_upload_image(&self) -> Result<Option<String>> {
         let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
-        let req = reqwest::get(&self.uri).await?;
-        let bytes = req.bytes().await?;
-        let pdf = lopdf::Document::load_mem(&bytes)?;
+        let pdf = self.get_pdf().await?;
 
         for page in pdf.get_pages() {
             if let Ok(page_images) = &mut pdf.get_page_images(page.1) {
@@ -79,9 +89,7 @@ impl Gazette {
     }
 
     pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
-        let req = reqwest::get(&self.uri).await?;
-        let bytes = req.bytes().await?;
-        let pdf = lopdf::Document::load_mem(&bytes)?;
+        let pdf = self.get_pdf().await?;
 
         for page in pdf.get_pages() {
             if let Ok(page_text) = &mut pdf.extract_text(&[page.0]) {
@@ -104,5 +112,48 @@ impl Gazette {
             }
         }
         Ok(None)
+    }
+
+    pub(crate) async fn get_date(&self) -> Result<(NaiveDate, NaiveDate)> {
+        let pdf = self.get_pdf().await?;
+
+        let mut all_text = String::new();
+        for page in pdf.get_pages() {
+            if let Ok(page_text) = pdf.extract_text(&[page.0]) {
+                all_text.push_str(&page_text);
+            }
+        }
+
+        let declaration_start_index = all_text
+            .find("This declaration will be in place from")
+            .ok_or(anyhow!("Could not find date identifier"))?;
+        let search_text = &all_text[declaration_start_index..];
+        let declaration_end_index = search_text.find('.').unwrap_or(search_text.len());
+
+        let date_string = search_text
+            ["This declaration will be in place from".len()..declaration_end_index]
+            .trim()
+            .to_string();
+
+        let mut date_result = Vec::new();
+        let date_regex = Regex::new(r"\b\d{1,2}\s\w{1,9}\s\d{4}\b")?;
+
+        for cap in date_regex.captures_iter(&date_string) {
+            if let Some(date_str) = cap.get(0) {
+                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y") {
+                    Ok(parsed_date) => date_result.push(parsed_date),
+                    Err(_) => continue,
+                }
+            }
+        }
+
+        date_result.sort();
+        let start = date_result[0];
+        let mut end = start;
+        if date_result.len() > 1 {
+            end = date_result[1];
+        }
+
+        Ok((start, end))
     }
 }
