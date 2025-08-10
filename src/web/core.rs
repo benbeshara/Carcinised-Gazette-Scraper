@@ -18,7 +18,7 @@ use axum::{
 use futures::stream::{self, Stream};
 use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
-use std::{convert::Infallible, time::Duration};
+use std::{convert::Infallible, env, time::Duration};
 use tokio_stream::StreamExt as _;
 
 pub async fn start_server() {
@@ -74,6 +74,7 @@ async fn fetch_polygons() -> String {
     let db = DatabaseConnection {
         provider: RedisProvider,
     };
+    let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
         let mut feature_collection = GeoJsonFeatureCollection::new();
 
@@ -94,6 +95,7 @@ async fn fetch_polygons() -> String {
 
                 let mut start = String::new();
                 let mut end = String::new();
+                let mut img_uri = None;
 
                 if let Some(start_date) = &gazette.start {
                     start = start_date.format("%Y-%m-%d").to_string();
@@ -103,15 +105,19 @@ async fn fetch_polygons() -> String {
                     end = end_date.format("%Y-%m-%d").to_string();
                 }
 
+                if let Some(img) = &gazette.img_uri {
+                    img_uri = Some(format!("{}{}", base_uri, img));
+                }
+
                 let feature = GeoJsonFeature {
                     type_field: "Feature".to_string(),
                     geometry: GeoJsonGeometry::Polygon { coordinates },
                     properties: GeoJsonProperties {
                         title: gazette.title,
                         uri: gazette.uri,
-                        img_uri: gazette.img_uri,
+                        img_uri,
                         start,
-                        end
+                        end,
                     },
                 };
 
@@ -128,6 +134,7 @@ async fn fetch_circles() -> String {
     let db = DatabaseConnection {
         provider: RedisProvider,
     };
+    let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
         let mut feature_collection = GeoJsonFeatureCollection::new();
 
@@ -144,6 +151,7 @@ async fn fetch_circles() -> String {
 
                     let mut start = String::new();
                     let mut end = String::new();
+                    let mut img_uri = None;
 
                     if let Some(start_date) = &gazette.start {
                         start = start_date.format("%Y-%m-%d").to_string();
@@ -153,13 +161,17 @@ async fn fetch_circles() -> String {
                         end = end_date.format("%Y-%m-%d").to_string();
                     }
 
+                    if let Some(img) = &gazette.img_uri {
+                        img_uri = Some(format!("{}{}", base_uri, img));
+                    }
+
                     let feature = GeoJsonFeature {
                         type_field: "Feature".to_string(),
                         geometry: GeoJsonGeometry::Point { coordinates },
                         properties: GeoJsonProperties {
                             title: gazette.title,
                             uri: gazette.uri,
-                            img_uri: gazette.img_uri,
+                            img_uri,
                             start,
                             end,
                         },
@@ -179,6 +191,7 @@ async fn render_list() -> String {
     let db = DatabaseConnection {
         provider: RedisProvider,
     };
+    let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
             acc += html!(
@@ -197,8 +210,8 @@ async fn render_list() -> String {
                     }
                     div.thumbnail {
                         @if let Some(img_uri) = &gz.img_uri {
-                            a href=(img_uri) target="_blank" {
-                                img src=(img_uri) {}
+                            a href=(&gz.uri) target="_blank" {
+                                img src=(format!("{}{}", &base_uri, &img_uri)) {}
                             }
                         }
                     }
