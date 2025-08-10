@@ -1,0 +1,109 @@
+html {
+    background-color: #225;
+    color: #ccc;
+    font-family: sans-serif;
+}
+div.center {
+    margin: auto;
+    width: 60%;
+}
+span.heading {
+    font-size: 1.8rem;
+    display: block;
+    margin-top: 1rem;
+}
+span.subheading {
+    font-size: 1.4rem;
+    display: block;
+    word-wrap: break-word;
+    white-space: normal;
+    margin-bottom: 1rem;
+}
+div#map {
+    height: 600px;
+    margin: 0 -1rem;
+}
+span.uri {
+    font-size: 0.9rem;
+    color: #aaa;
+    display: block;
+    word-wrap: break-word;
+}
+a {
+    color: #ccc;
+    text-decoration: none;
+    font-size: 1.2rem;
+}
+.custom-popup a {
+    color: #0051ff;
+    text-decoration: none;
+    font-size: 1.0rem;
+}
+ul {
+    margin: 0;
+    padding: 0;
+    list-style-type: none;
+}
+li {
+    padding: 0.5em 1rem;
+    margin: 0 -1rem;
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+}
+li div {
+    flex-shrink: 3;
+}
+li div.thumbnail {
+    height: 128px;
+    width: 128px;
+}
+li div.thumbnail a img {
+    height: 128px;
+    width: 128px
+}
+li:hover {
+    background-color: #447;
+}
+li:nth-child(2n) {
+    background-color: #114;
+}
+li:nth-child(2n):hover {
+    background-color: #225;
+}
+.attribution {
+    margin: 1rem 0;
+    font-size: 0.65rem;
+    display: block;
+}
+@media (max-width: 430px) {
+    div.center {
+        width: 95%;
+    }
+    span.uri {
+        font-size: 1rem;
+        padding-top: 0.5rem;
+    }
+    a {
+        font-size: 1.4rem;
+    }
+    li {
+        padding: 1rem;
+        margin: 0;
+        background-color: #336;
+        display: block;
+        text-align: justify;
+    }
+    li div.thumbnail {
+        height: 96px;
+        width: 100%;
+    }
+    li div.thumbnail a img {
+        height: 96px;
+        width: 100%;
+    }
+    .leaflet-control-attribution {
+        font-size: 8px;
+    }
+}

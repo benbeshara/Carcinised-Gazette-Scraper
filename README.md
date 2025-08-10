@@ -12,9 +12,21 @@ To run:
 
 3. Clone this repository
 
-4. Run `cargo run` in the directory you cloned this to
+4. `cp .env.example .env` and fill in the required keys
+   - OPENAI_API_KEY is used to parse the text blocks into locations
+   - AZURE_API_KEY or GOOGLE_MAPS_API_KEY depending on which service you want to use (minor code changes required to switch to azure)
+   - OBJECT_STORAGE_URL is the public endpoint of your object storage service for retrieving images via web
+   - OBJECT_STORAGE_ACCESS_KEY_ID and OBJECT_STORAGE_SECRET_ACCESS_KEY are credentials for uploading images to object storage
+   
+     Technically the app should work fine without these, but some functionality missing
 
-5. Go to `https://localhost:3000/` in your web browser
+     I would like to not rely on these services; feel free to open an MR if you can help!
+
+5. Source the env - `set -a; source .env; set +a`
+
+6. Run `cargo run` in the directory you cloned this to
+
+7. Go to `https://localhost:3000/` in your web browser
 
 Feel free to deploy this online at will.
 

@@ -4,17 +4,22 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.7.9"
+axum = { version = "0.8.4", features = ["macros"] }
 futures = "0.3.31"
-lopdf = "0.34.0"
-maud = { version = "0.26.0", features = ["axum"] }
-redis = {  version = "0.27.6", features = ["cluster", "tokio-native-tls-comp"] }
-reqwest = "0.12.9"
+lopdf = "0.36.0"
+maud = { version = "0.27.0", features = ["axum"] }
+redis = {  version = "0.32.3", features = ["cluster", "tokio-native-tls-comp"] }
+reqwest = { version = "0.12.9", features = ["json"] }
 select = "0.6.0"
 sha1 = "0.10.6"
 tokio = { version = "1.42.0", features = ["full"] }
 tokio-stream = "0.1.17"
-imgurs = "0.11.2"
 redis-macros = "0.5.1"
 serde = { version = "1.0", features = ["derive"] }
+serde_with = {  version = "3.14.0", features = ["chrono"] }
 serde_json = { version = "1.0" }
+async-trait = "0.1.83"
+anyhow = "1.0.98"
+chrono = "0.4.38"
+regex = "1.11.1"
+rust-s3 = "0.35.1"
