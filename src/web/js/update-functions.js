@@ -8,9 +8,10 @@ function updatePolygons(geojsonData) {
         style: function(feature) {
             let start = Date.parse(feature.properties.start);
             let end = Date.parse(feature.properties.end);
+            let beyond = end + 1000 * 60 * 60 * 24;
             let date = Date.now()
 
-            if(date > end){
+            if(date > beyond){
                 return {
                     color: '#4444ff',
                     weight: 2,
@@ -36,10 +37,10 @@ function updatePolygons(geojsonData) {
                                         <p><strong>In effect from:</strong> ${feature.properties.start} until ${feature.properties.end}</p>
                                         <p><a href='${feature.properties.uri}' target='_blank'>View Details</a></p>
                                         ${feature.properties.img_uri ?
-                `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
-                : ''}
-                                    </div>
-                                `;
+                                        `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
+                                            : ''}
+                                        </div>
+                                    `;
             layer.bindPopup(popupContent);
             currentPolygons.push(layer);
         }
@@ -59,9 +60,10 @@ function updateCircles(geojsonData) {
         style: function(feature) {
             let start = Date.parse(feature.properties.start);
             let end = Date.parse(feature.properties.end);
+            let beyond = end + 1000 * 60 * 60 * 24;
             let date = Date.now()
 
-            if(date > end){
+            if(date > beyond){
                 return {
                     color: '#4444ff',
                     weight: 2,
@@ -83,15 +85,16 @@ function updateCircles(geojsonData) {
         onEachFeature: function(feature, layer) {
             const popupContent = `
                                     <div class='custom-popup'>
-                                        <h4>${feature.properties.title || 'No Title'}</h4>
+                                        <p><strong>${feature.properties.title}</strong></p>
+                                        <p><strong>In effect from:</strong> ${feature.properties.start} until ${feature.properties.end}</p>
                                         <p><a href='${feature.properties.uri}' target='_blank'>View Details</a></p>
                                         ${feature.properties.img_uri ?
-                `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
-                : ''}
+                                            `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
+                                        : ''}
                                     </div>
-                                `;
+                                    `;
             layer.bindPopup(popupContent);
-            currentCircles.push(layer);
+            currentPolygons.push(layer);
         }
     }).addTo(map);
 }
