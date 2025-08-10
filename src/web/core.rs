@@ -150,7 +150,7 @@ async fn fetch_circles() -> String {
                     .remove_isolated_points(2.5, 2) // these numbers are a best-guess and should be tweaked over time
                     .clone();
 
-                if processed_polygon.data.len() == 2 {
+                if processed_polygon.data.len() < 3 {
                     let coordinates = processed_polygon.centre().into();
 
                     let mut start = String::new();
