@@ -38,28 +38,25 @@ pub async fn start_server() {
 }
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let heartbeat = tokio_stream::wrappers::IntervalStream::new(
-        tokio::time::interval(Duration::from_secs(1))
-    )
-        .map(|_| Ok(Event::default().data("keep-alive-text").event("heartbeat")));
-
     let data_future = send_data();
     let polygons_future = fetch_polygons();
     let circles_future = fetch_circles();
 
     let (data, polygons, circles) = tokio::join!(data_future, polygons_future, circles_future);
 
-    let data_stream = stream::iter([
+    let data_stream = tokio_stream::iter([
         Event::default().data(data).event("list"),
         Event::default().data(circles).event("circles"),
         Event::default().data(polygons).event("close"),
     ])
         .map(Ok);
 
-    let combined_stream = heartbeat
-        .chain(data_stream);
-
-    Sse::new(combined_stream)
+    Sse::new(data_stream.merge(stream::pending()))
+        .keep_alive(
+            axum::response::sse::KeepAlive::new()
+                .interval(Duration::from_secs(25))
+                .text("keep-alive-text")
+        )
 }
 
 async fn send_data() -> String {
