@@ -77,9 +77,22 @@ li:nth-child(2n):hover {
     font-size: 0.65rem;
     display: block;
 }
+
+.leaflet-container a {
+    font-size: 0.75rem;
+}
+
+.leaflet-touch .leaflet-control-attribution, .leaflet-touch .leaflet-control-layers, .leaflet-touch .leaflet-bar {
+    font-size: 0.8rem;
+}
+
 @media (max-width: 430px) {
     div.center {
         width: 95%;
+    }
+    div#map {
+        height: 400px;
+        margin: 0 -1rem;
     }
     span.uri {
         font-size: 1rem;
