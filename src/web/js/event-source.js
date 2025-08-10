@@ -5,10 +5,6 @@ eventSource.addEventListener('close', function(e) {
     document.getElementById('notice').outerHTML = '';
     eventSource.close();
 });
-eventSource.addEventListener('circles', function(e) {
-    const circleData = JSON.parse('[' + e.data + ']');
-    updateCircles(circleData);
-});
 eventSource.addEventListener('list', function(e) {
     document.getElementById('list').outerHTML = e.data;
 });

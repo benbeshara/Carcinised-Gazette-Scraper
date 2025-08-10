@@ -40,23 +40,20 @@ pub async fn start_server() {
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let data_future = send_data();
     let polygons_future = fetch_polygons();
-    let circles_future = fetch_circles();
 
-    let (data, polygons, circles) = tokio::join!(data_future, polygons_future, circles_future);
+    let (data, polygons) = tokio::join!(data_future, polygons_future);
 
     let data_stream = tokio_stream::iter([
         Event::default().data(data).event("list"),
-        Event::default().data(circles).event("circles"),
         Event::default().data(polygons).event("close"),
     ])
-        .map(Ok);
+    .map(Ok);
 
-    Sse::new(data_stream.merge(stream::pending()))
-        .keep_alive(
-            axum::response::sse::KeepAlive::new()
-                .interval(Duration::from_secs(25))
-                .text("keep-alive-text")
-        )
+    Sse::new(data_stream.merge(stream::pending())).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(25))
+            .text("keep-alive-text"),
+    )
 }
 
 async fn send_data() -> String {
@@ -84,19 +81,6 @@ async fn fetch_polygons() -> String {
 
         for gazette in gazettes {
             if let Some(polygon) = &gazette.polygon {
-                let processed_polygon = polygon
-                    .clone()
-                    .remove_isolated_points(5.0, 2)
-                    .remove_identical_points()
-                    .convex_hull();
-
-                // Convert polygon data to GeoJSON format
-                let coordinates = vec![processed_polygon
-                    .data
-                    .iter()
-                    .map(|point| [point.longitude, point.latitude])
-                    .collect::<Vec<[f64; 2]>>()];
-
                 let mut start = String::new();
                 let mut end = String::new();
                 let mut img_uri = None;
@@ -113,9 +97,32 @@ async fn fetch_polygons() -> String {
                     img_uri = Some(format!("{}{}", base_uri, img));
                 }
 
+                let processed_polygon = polygon
+                    .clone()
+                    .remove_isolated_points(5.0, 2)
+                    .remove_identical_points()
+                    .clone();
+
+                let geometry;
+
+                if processed_polygon.data.len() < 3 {
+                    geometry = GeoJsonGeometry::Point {
+                        coordinates: processed_polygon.centre().into(),
+                    };
+                } else {
+                    geometry = GeoJsonGeometry::Polygon {
+                        coordinates: vec![processed_polygon
+                            .convex_hull()
+                            .data
+                            .iter()
+                            .map(|point| [point.longitude, point.latitude])
+                            .collect::<Vec<[f64; 2]>>()],
+                    };
+                }
+
                 let feature = GeoJsonFeature {
                     type_field: "Feature".to_string(),
-                    geometry: GeoJsonGeometry::Polygon { coordinates },
+                    geometry,
                     properties: GeoJsonProperties {
                         title: gazette.title,
                         uri: gazette.uri,
@@ -126,63 +133,6 @@ async fn fetch_polygons() -> String {
                 };
 
                 feature_collection.features.push(feature);
-            }
-        }
-
-        return serde_json::to_string(&feature_collection).unwrap_or_else(|_| "{}".to_string());
-    }
-    "[]".to_string()
-}
-
-async fn fetch_circles() -> String {
-    let db = DatabaseConnection {
-        provider: RedisProvider,
-    };
-    let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
-    if let Ok(gazettes) = db.fetch_entries().await {
-        let mut feature_collection = GeoJsonFeatureCollection::new();
-
-        for gazette in gazettes {
-            if let Some(polygon) = &gazette.polygon {
-                let processed_polygon = polygon
-                    .to_owned()
-                    .remove_identical_points()
-                    .remove_isolated_points(2.5, 2) // these numbers are a best-guess and should be tweaked over time
-                    .clone();
-
-                if processed_polygon.data.len() < 3 {
-                    let coordinates = processed_polygon.centre().into();
-
-                    let mut start = String::new();
-                    let mut end = String::new();
-                    let mut img_uri = None;
-
-                    if let Some(start_date) = &gazette.start {
-                        start = start_date.format("%Y-%m-%d").to_string();
-                    }
-
-                    if let Some(end_date) = &gazette.end {
-                        end = end_date.format("%Y-%m-%d").to_string();
-                    }
-
-                    if let Some(img) = &gazette.img_uri {
-                        img_uri = Some(format!("{}{}", base_uri, img));
-                    }
-
-                    let feature = GeoJsonFeature {
-                        type_field: "Feature".to_string(),
-                        geometry: GeoJsonGeometry::Point { coordinates },
-                        properties: GeoJsonProperties {
-                            title: gazette.title,
-                            uri: gazette.uri,
-                            img_uri,
-                            start,
-                            end,
-                        },
-                    };
-
-                    feature_collection.features.push(feature);
-                }
             }
         }
 
@@ -233,7 +183,6 @@ async fn render_list() -> String {
 
 async fn landing() -> Markup {
     let initial_polygons = fetch_polygons().await;
-    let initial_circles = fetch_circles().await;
     let initial_list_content = initial_list().await;
 
     base_template(html! {
@@ -245,21 +194,19 @@ async fn landing() -> Markup {
             (footer_section())
         }
         (get_styles())
-        (map_javascript(&initial_polygons, &initial_circles))
+        (map_javascript(&initial_polygons))
     })
 }
 
-fn map_javascript(initial_polygons: &str, initial_circles: &str) -> Markup {
+fn map_javascript(initial_polygons: &str) -> Markup {
     html! {
         script {
             (PreEscaped(include_str!("js/map-init.js")))
             (PreEscaped(include_str!("js/update-functions.js")))
             (PreEscaped(format!(
                 "let initialPolygons = {};
-                let initialCircles = {};
-                updatePolygons(initialPolygons);
-                updateCircles(initialCircles);",
-                initial_polygons, initial_circles
+                updatePolygons(initialPolygons);",
+                initial_polygons
             )))
             (PreEscaped(include_str!("js/event-source.js")))
         }

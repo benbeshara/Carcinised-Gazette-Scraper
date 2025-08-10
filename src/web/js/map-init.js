@@ -9,4 +9,3 @@ setTimeout(function () {
     map.invalidateSize(true);
 }, 100);
 let currentPolygons = [];
-let currentCircles = [];
