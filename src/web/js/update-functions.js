@@ -10,31 +10,30 @@ function updatePolygons(geojsonData) {
             let end = Date.parse(feature.properties.end);
             let date = Date.now()
 
-            if((start < date < end) || (date === start)){
-                return {
-                    color: '#ff0000',
-                    weight: 2,
-                    opacity: 0.65
-                }
-            }
             if(date > end){
                 return {
                     color: '#4444ff',
                     weight: 2,
                     opacity: 0.25
                 }
+            } else if(start <= date){
+                return {
+                    color: '#ff0000',
+                    weight: 2,
+                    opacity: 0.65
+                }
             }
             return {
                 color: '#ffec16',
                 weight: 2,
-                opacity: 0.65
+                opacity: 0.25
             };
         },
         onEachFeature: function(feature, layer) {
-            // Create popup content using feature properties
             const popupContent = `
                                     <div class='custom-popup'>
-                                        <h4>${feature.properties.title || 'No Title'}</h4>
+                                        <p><strong>${feature.properties.title}</strong></p>
+                                        <p><strong>In effect from:</strong> ${feature.properties.start} until ${feature.properties.end}</p>
                                         <p><a href='${feature.properties.uri}' target='_blank'>View Details</a></p>
                                         ${feature.properties.img_uri ?
                 `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
@@ -48,12 +47,10 @@ function updatePolygons(geojsonData) {
 }
 
 function updateCircles(geojsonData) {
-    console.log('GeoJSON data:', geojsonData);
     currentCircles.forEach(function(circle) {
         circle.remove();
     });
     currentCircles = [];
-    console.log(geojsonData);
 
     L.geoJSON(geojsonData, {
         pointToLayer: (feature, latlng) => {
@@ -64,28 +61,26 @@ function updateCircles(geojsonData) {
             let end = Date.parse(feature.properties.end);
             let date = Date.now()
 
-            if((start < date < end) || (date === start)){
-                return {
-                    color: '#ff0000',
-                    weight: 2,
-                    opacity: 0.65
-                }
-            }
             if(date > end){
                 return {
                     color: '#4444ff',
                     weight: 2,
                     opacity: 0.25
                 }
+            } else if(start <= date){
+                return {
+                    color: '#ff0000',
+                    weight: 2,
+                    opacity: 0.65
+                }
             }
             return {
                 color: '#ffec16',
                 weight: 2,
-                opacity: 0.65
+                opacity: 0.25
             };
         },
         onEachFeature: function(feature, layer) {
-            // Create popup content using feature properties
             const popupContent = `
                                     <div class='custom-popup'>
                                         <h4>${feature.properties.title || 'No Title'}</h4>

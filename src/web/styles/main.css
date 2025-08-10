@@ -34,6 +34,11 @@ a {
     text-decoration: none;
     font-size: 1.2rem;
 }
+.custom-popup a {
+    color: #0051ff;
+    text-decoration: none;
+    font-size: 1.0rem;
+}
 ul {
     margin: 0;
     padding: 0;
