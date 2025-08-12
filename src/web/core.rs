@@ -57,7 +57,7 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
 }
 
 async fn send_data() -> String {
-    let mut updater = Updater {
+    let updater = Updater {
         uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
         base_uri: "http://www.gazette.vic.gov.au".to_string(),
     };

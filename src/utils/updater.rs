@@ -16,7 +16,7 @@ pub struct Updater {
 }
 
 impl Updater {
-    pub async fn update(&mut self) -> Result<Vec<String>> {
+    pub async fn update(&self) -> Result<Vec<String>> {
         let results = self.parse_webpage().await?;
 
         let filtered_results = futures::stream::iter(results)
