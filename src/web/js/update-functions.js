@@ -1,3 +1,5 @@
+const MS_PER_DAY = 86400000;
+
 function updatePolygons(geojsonData) {
     currentPolygons.forEach(function(polygon) {
         polygon.remove();
@@ -11,9 +13,13 @@ function updatePolygons(geojsonData) {
         style: function(feature) {
             let start = Date.parse(feature.properties.start);
             let end = Date.parse(feature.properties.end);
-            let beyond = end + 1000 * 60 * 60 * 24;
+            let beyond = end + MS_PER_DAY;
             let date = Date.now()
+            let falloff = date - MS_PER_DAY * 30;
 
+            if(end < falloff){
+                return
+            }
             if(date > beyond){
                 return {
                     color: '#4444ff',
@@ -28,7 +34,7 @@ function updatePolygons(geojsonData) {
                 }
             }
             return {
-                color: '#ffec16',
+                color: '#ff6200',
                 weight: 2,
                 opacity: 0.25
             };
