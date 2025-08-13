@@ -15,11 +15,10 @@ use axum::{
     routing::get,
     Router,
 };
-use futures::stream::{self, Stream};
+use futures::stream::Stream;
 use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, env, time::Duration};
-use tokio_stream::StreamExt as _;
 
 pub async fn start_server() {
     let app = Router::new()
@@ -80,15 +79,6 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
             .interval(Duration::from_secs(25))
             .text("keep-alive-text"),
     )
-}
-
-async fn send_data() -> String {
-    let updater = Updater {
-        uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
-        base_uri: "http://www.gazette.vic.gov.au".to_string(),
-    };
-    let _ = updater.update().await;
-    format!("<ul>{}</ul>", render_list().await)
 }
 
 async fn initial_list() -> Markup {
