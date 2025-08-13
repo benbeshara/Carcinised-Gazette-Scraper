@@ -38,18 +38,44 @@ pub async fn start_server() {
 }
 
 async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let data_future = send_data();
-    let polygons_future = fetch_polygons();
+    let updater = Updater {
+        uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
+        base_uri: "http://www.gazette.vic.gov.au".to_string(),
+    };
 
-    let (data, polygons) = tokio::join!(data_future, polygons_future);
+    let (tx, rx) = tokio::sync::mpsc::channel(32);
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
-    let data_stream = tokio_stream::iter([
-        Event::default().data(data).event("list"),
-        Event::default().data(polygons).event("close"),
-    ])
-    .map(Ok);
+    tokio::spawn(async move {
+        let update_task = tokio::spawn(async move {
+            let _ = updater.update().await;
+        });
 
-    Sse::new(data_stream.merge(stream::pending())).keep_alive(
+        while !update_task.is_finished() {
+            let _ = tx.send(Ok(Event::default()
+                .data("updating...")
+                .event("heartbeat"))).await;
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+
+        let _ = update_task.await;
+
+        let data_future = render_list();
+        let polygons_future = fetch_polygons();
+        let (data, polygons) = tokio::join!(data_future, polygons_future);
+
+        let _ = tx.send(Ok(Event::default()
+            .data("update complete")
+            .event("update"))).await;
+        let _ = tx.send(Ok(Event::default()
+            .data(data)
+            .event("list"))).await;
+        let _ = tx.send(Ok(Event::default()
+            .data(polygons)
+            .event("close"))).await;
+    });
+
+    Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(25))
             .text("keep-alive-text"),
