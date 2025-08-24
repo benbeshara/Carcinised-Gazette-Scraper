@@ -141,7 +141,7 @@ impl Gazette {
         let declaration_start_index = all_text
             .find("This declaration will be in place from")
             .ok_or(anyhow!("Could not find date identifier"))?;
-        let search_text = &all_text[declaration_start_index..];
+        let search_text = &all_text[declaration_start_index..].replace("\n", "");
         let declaration_end_index = search_text.find(".\n").unwrap_or(search_text.len());
 
         let date_string = search_text
@@ -161,6 +161,9 @@ impl Gazette {
             }
         }
 
+        if date_result.is_empty() {
+            Err(anyhow!("No dates found in {}", &self.uri))?
+        }
         date_result.sort();
         let start = date_result[0];
         let mut end = start;
