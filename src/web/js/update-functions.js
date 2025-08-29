@@ -17,7 +17,7 @@ function updatePolygons(geojsonData) {
             let date = Date.now()
             let falloff = date - MS_PER_DAY * 30;
 
-            if(end < falloff){
+            if(end < date){
                 return
             }
             if(date > beyond){
