@@ -220,3 +220,20 @@ fn test_date_regex() {
 
     assert_eq!(date_result.len(), 2);
 }
+
+#[tokio::test]
+async fn test_get_polygon() {
+    let gazette = Gazette {
+        uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+        title: None,
+        img_uri: None,
+        flagged: false,
+        polygon: None,
+        start: None,
+        end: None,
+    };
+
+    let polygon = gazette.get_polygon().await.unwrap();
+
+    assert!(polygon.is_some());
+}
