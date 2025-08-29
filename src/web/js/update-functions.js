@@ -40,10 +40,22 @@ function updatePolygons(geojsonData) {
             };
         },
         onEachFeature: function(feature, layer) {
+            const start_date = new Date(feature.properties.start);
+            const start_string = `${start_date.toLocaleDateString('en-AU', { dateStyle: 'full'})}`;
+            const end_date = new Date(feature.properties.end);
+            const end_string = `${end_date.toLocaleDateString('en-AU', { dateStyle: 'full' })}`;
+            const duration = `${Math.floor((end_date - start_date) / MS_PER_DAY)} day(s)`;
+            const time_until_start = Math.floor((start_date - Date.now()) / MS_PER_DAY);
+            let start_notice = '';
+            if(time_until_start > 0){
+                start_notice = `<strong>Days until start:</strong> ${time_until_start}<br />`
+            }
+            const [title, posted] = feature.properties.title.split(" Dated ", 2);
             const popupContent = `
                                     <div class='custom-popup'>
-                                        <p><strong>${feature.properties.title}</strong></p>
-                                        <p><strong>In effect from:</strong> ${feature.properties.start} until ${feature.properties.end}</p>
+                                        <p><strong>${title}</strong><br />Published ${posted}</p>
+                                        <p><strong>Begins:</strong> ${start_string}<br/><strong>Ends:</strong> ${end_string}</p>
+                                        <p>${start_notice}<strong>Duration:</strong> ${duration}</p>
                                         <p><a href='${feature.properties.uri}' target='_blank'>View Details</a></p>
                                         ${feature.properties.img_uri ?
                                         `<img alt='${feature.properties.title}' src='${feature.properties.img_uri}' style='max-width: 200px;'>`
