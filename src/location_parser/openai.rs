@@ -48,15 +48,19 @@ impl LocationParserService for OpenAI {
                         "role": "system",
                         "content": "You are a location extraction service. Extract locations from the input text following these rules:\n\
                         1. Return only a list of locations, one per line\n\
-                        2. For intersections: Format as 'Corner of X and Y Streets'\n\
-                        3. For railways: Convert 'X Rail' to 'X Railway Station'\n\
-                        4. For shopping areas: Include 'Shopping Centre' in full\n\
-                        5. For CBDs: Keep format 'X CBD'\n\
-                        6. Ignore content in parentheses\n\
-                        7. For bridges and rivers, prefer the bridge name\n\
-                        8. Remove any duplicate locations\n\
-                        9. Maintain the order of locations as they appear in the text\n\
-                        10. Include full location names with relevant context\n\
+                        2. All locations should try to be an intersection\n\
+                        3. For intersections: Format as 'Corner of X and Y Streets'\n\
+                        4. For railways: Convert 'X Rail' to 'X Railway Station'\n\
+                        5. For shopping areas: Include 'Shopping Centre' in full\n\
+                        6. For CBDs: Keep format 'X CBD'\n\
+                        7. Ignore content in parentheses\n\
+                        8. For bridges and rivers, prefer the bridge name\n\
+                        9. Remove any duplicate locations\n\
+                        10. Maintain the order of locations as they appear in the text\n\
+                        11. Include full location names with relevant context\n\
+                        12. Locations mentioning both 'Swanston Street' and 'Yarra Walk' mean the Princes Bridge instead\n\
+                        13. The 'Bourke Street Pedestrian Bridge' should be the 'Southern Cross Bridge'\n\
+                        14. If there are no clear intersections specified, assume all locations are listed clockwise and create an the intersections like a polygon\n\
                         Do not include any additional text, explanations, or headers in the output."
                     },
                 {"role": "user", "content": locations}
@@ -73,4 +77,21 @@ impl LocationParserService for OpenAI {
             .map(|r| r.into())
             .map_err(Into::into)
     }
+}
+
+#[tokio::test]
+async fn test_location_parser() {
+    use crate::location_parser::LocationParser;
+
+    let para = "Southern Cross Railway Station – all public places within the
+area bound by and including, the intersection of Southern Cross Railway Station and surrounding
+area encompassing Collins Street, Spencer Street including Bourke Street Pedestrian Bridge,
+Lonsdale Street west of Spencer Street, La Trobe Street and Wurundjeri Way.";
+    let s = LocationParser {
+        provider: OpenAI,
+        locations: para.to_string(),
+    };
+    let r = s.parse_locations().await.unwrap();
+
+    assert!(r.len() == 7);
 }

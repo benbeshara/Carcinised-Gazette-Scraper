@@ -103,6 +103,9 @@ async fn fetch_polygons() -> String {
                     if end_date < &tomorrow {
                         continue;
                     }
+                } else {
+                    // If we don't have dates, don't draw a polygon - this is mostly just for local testing
+                    continue;
                 }
 
                 let mut start = String::new();
