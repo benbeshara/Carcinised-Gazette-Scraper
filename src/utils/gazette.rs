@@ -6,7 +6,7 @@ use crate::location_parser::openai::OpenAI;
 use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
-use chrono::NaiveDate;
+use chrono::{Datelike, Local, NaiveDate};
 use lopdf::Document;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
@@ -142,7 +142,7 @@ impl Gazette {
             .find("This declaration will be in place from")
             .ok_or(anyhow!("Could not find date identifier"))?;
         let search_text = &all_text[declaration_start_index..].replace("\n", "");
-        let declaration_end_index = search_text.find(".\n").unwrap_or(search_text.len());
+        let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
 
         let date_string = search_text
             ["This declaration will be in place from".len()..declaration_end_index]
@@ -150,11 +150,17 @@ impl Gazette {
             .to_string();
 
         let mut date_result = Vec::new();
-        let date_regex = Regex::new(r"\b\d{1,2}\s\w{1,9}\s\d{4}\b")?;
+        let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b")?;
+        let current_year = Local::now().year();
 
         for cap in date_regex.captures_iter(&date_string) {
             if let Some(date_str) = cap.get(0) {
-                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y") {
+                let d = date_str.as_str();
+                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y")
+                    .or_else(|_| {
+                        let with_year = format!("{} {}", date_str.as_str(), current_year);
+                        NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
+                    }) {
                     Ok(parsed_date) => date_result.push(parsed_date),
                     Err(_) => continue,
                 }
@@ -173,4 +179,44 @@ impl Gazette {
 
         Ok((start, end))
     }
+}
+
+#[tokio::test]
+async fn test_parse_date() {
+    let gazette = Gazette {
+        uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+        title: None,
+        img_uri: None,
+        flagged: false,
+        polygon: None,
+        start: None,
+        end: None,
+    };
+
+    let date_range = gazette.get_date().await.unwrap();
+    assert!(date_range.0 < date_range.1);
+}
+
+#[test]
+fn test_date_regex() {
+    let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October 2025";
+    let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b").unwrap();
+    let mut date_result = Vec::new();
+    let current_year = Local::now().year();
+
+    for cap in date_regex.captures_iter(&date_string) {
+        if let Some(date_str) = cap.get(0) {
+            let d = date_str.as_str();
+            match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y")
+                .or_else(|_| {
+                    let with_year = format!("{} {}", date_str.as_str(), current_year);
+                    NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
+                }) {
+                Ok(parsed_date) => date_result.push(parsed_date),
+                Err(_) => continue,
+            }
+        }
+    }
+
+    assert_eq!(date_result.len(), 2);
 }
