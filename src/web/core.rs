@@ -19,6 +19,7 @@ use futures::stream::Stream;
 use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, env, time::Duration};
+use chrono::{Local, TimeDelta};
 
 pub async fn start_server() {
     let app = Router::new()
@@ -94,9 +95,16 @@ async fn fetch_polygons() -> String {
     let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
         let mut feature_collection = GeoJsonFeatureCollection::new();
+        let tomorrow = Local::now().date_naive() + TimeDelta::days(1);
 
         for gazette in gazettes {
             if let Some(polygon) = &gazette.polygon {
+                if let Some(end_date) = &gazette.end {
+                    if end_date < &tomorrow {
+                        continue;
+                    }
+                }
+
                 let mut start = String::new();
                 let mut end = String::new();
                 let mut img_uri = None;
