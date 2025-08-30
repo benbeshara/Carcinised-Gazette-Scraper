@@ -52,7 +52,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_mock_geocoder() {
-        let geocoder = MockGeocoderProvider::new();
+        let geocoder = MockGeocoderProvider {};
 
         // Test known location
         let ny_position = geocoder.geocode("New York").await.unwrap();
@@ -67,7 +67,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_geocoder_request() {
-        let service = MockGeocoderProvider::new();
+        let service = MockGeocoderProvider {};
         let request = GeocoderRequest {
             input: "London".to_string(),
             service,

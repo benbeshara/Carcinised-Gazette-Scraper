@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+#[derive(Clone)]
 pub struct MockDatabaseProvider {
     storage: Arc<RwLock<HashMap<String, Gazette>>>,
 }

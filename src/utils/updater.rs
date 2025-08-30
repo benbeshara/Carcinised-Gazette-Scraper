@@ -1,6 +1,7 @@
-use crate::db::redis::RedisProvider;
+use crate::db::core::DatabaseProvider;
 use crate::db::DatabaseConnection;
-use crate::utils::gazette::{make_hash, Gazette};
+use crate::image_service::ImageService;
+use crate::utils::gazette::{make_hash, Gazette, GazetteHandler};
 use anyhow::Result;
 use futures::stream::StreamExt;
 use select::document::Document;
@@ -10,12 +11,22 @@ const FIRST_PAGE: u32 = 1;
 const TARGET_TEXT: &str = "Control of Weapons Act 1990";
 
 #[derive(Clone, Debug)]
-pub struct Updater {
+pub struct Updater<T, U>
+where
+    T: DatabaseProvider + Clone,
+    U: ImageService + Copy,
+{
     pub uri: String,
     pub base_uri: String,
+    pub database_provider: T,
+    pub image_service: U,
 }
 
-impl Updater {
+impl<T, U> Updater<T, U>
+where
+    T: DatabaseProvider + Clone,
+    U: ImageService + Copy,
+{
     pub async fn update(&self) -> Result<Vec<String>> {
         let results = self.parse_webpage().await?;
 
@@ -24,7 +35,7 @@ impl Updater {
                 let (_, uri) = &result;
                 let hash = make_hash(uri);
                 let db = DatabaseConnection {
-                    provider: RedisProvider,
+                    provider: self.database_provider.clone(),
                 };
 
                 match db.has_entry(&hash).await {
@@ -45,45 +56,46 @@ impl Updater {
             .partition(|(_result, is_flagged)| *is_flagged);
 
         let flagged_futures = flagged.into_iter().map(|((title, uri), _)| async move {
-            let mut gazette = Gazette {
-                uri: uri.clone(),
-                title: Some(title),
-                img_uri: None,
-                flagged: true,
-                polygon: None,
-                start: None,
-                end: None,
+            let mut gazette_handler = GazetteHandler {
+                gazette: Gazette {
+                    uri: uri.clone(),
+                    title: Some(title),
+                    flagged: true,
+                    ..Default::default()
+                },
+                database_provider: self.database_provider.clone(),
+                image_service: self.image_service,
             };
 
-            if let Ok(img) = gazette.try_upload_image().await {
-                gazette.img_uri = img;
+            if let Ok(img) = gazette_handler.try_upload_image().await {
+                gazette_handler.gazette.img_uri = img;
             }
 
-            if let Ok(polygon) = gazette.get_polygon().await {
-                gazette.polygon = polygon;
+            if let Ok(polygon) = gazette_handler.gazette.get_polygon().await {
+                gazette_handler.gazette.polygon = polygon;
             }
 
-            if let Ok(date) = gazette.get_date().await {
-                gazette.start = Some(date.0);
-                gazette.end = Some(date.1);
+            if let Ok(date) = gazette_handler.gazette.get_date().await {
+                gazette_handler.gazette.start = Some(date.0);
+                gazette_handler.gazette.end = Some(date.1);
             }
 
-            let _ = gazette.save().await;
+            let _ = gazette_handler.save().await;
             uri
         });
 
         let discarded_futures = discarded.into_iter().map(|((title, uri), _)| async move {
-            let gazette = Gazette {
-                uri: uri.clone(),
-                title: Some(title),
-                img_uri: None,
-                flagged: false,
-                polygon: None,
-                start: None,
-                end: None,
+            let gazette_handler = GazetteHandler {
+                gazette: Gazette {
+                    uri: uri.clone(),
+                    title: Some(title),
+                    ..Default::default()
+                },
+                database_provider: self.database_provider.clone(),
+                image_service: self.image_service,
             };
 
-            let _ = gazette.save().await;
+            let _ = gazette_handler.save().await;
         });
 
         let (flagged_uris, _) = tokio::join!(

@@ -30,8 +30,8 @@ mod test {
     use crate::geocoder::mock::MockGeocoderProvider;
 
     #[tokio::test]
-    async fn test_your_application() {
-        let geocoder = MockGeocoderProvider::new();
+    async fn test_geocoder_request() {
+        let geocoder = MockGeocoderProvider {};
 
         // Test with a known location
         let request = GeocoderRequest {

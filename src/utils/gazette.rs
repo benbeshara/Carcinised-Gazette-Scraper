@@ -1,11 +1,11 @@
-use crate::db::redis::RedisProvider;
+use crate::db::core::DatabaseProvider;
 use crate::db::DatabaseConnection;
 use crate::geocoder::google::GoogleGeocoderProvider;
 use crate::geocoder::GeocoderRequest;
+use crate::image_service::{Image, ImageService};
 use crate::location_parser::openai::OpenAI;
 use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
-use crate::{image_service, image_service::Image};
 use anyhow::{anyhow, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use lopdf::Document;
@@ -27,10 +27,59 @@ pub struct Gazette {
     pub end: Option<NaiveDate>,
 }
 
+pub struct GazetteHandler<T, U>
+where
+    T: DatabaseProvider,
+    U: ImageService,
+{
+    pub gazette: Gazette,
+    pub database_provider: T,
+    pub image_service: U,
+}
+
 pub fn make_hash(key: &str) -> String {
     let mut hasher: CoreWrapper<Sha1Core> = Sha1::new();
     hasher.update(key);
     format!("{:x}", hasher.finalize())
+}
+
+impl<T, U> GazetteHandler<T, U>
+where
+    T: DatabaseProvider + Clone,
+    U: ImageService + Copy,
+{
+    pub(crate) async fn save(&self) -> Result<bool> {
+        let mut hash = make_hash(&self.gazette.uri);
+
+        if self.gazette.flagged {
+            hash = format!("flagged:{hash}");
+        } else {
+            hash = format!("discarded:{hash}");
+        }
+
+        let db = DatabaseConnection {
+            provider: self.database_provider.clone(),
+        };
+
+        db.create_entry(&hash, &self.gazette).await?;
+
+        Ok(true)
+    }
+
+    pub(crate) async fn try_upload_image(&self) -> Result<Option<String>> {
+        let hash = make_hash(&self.gazette.uri);
+
+        if let Ok(map) = &self.gazette.extract_map().await {
+            let image = Image {
+                filename: format!("./{hash}.jpg"),
+                data: map.clone(),
+                service: self.image_service,
+            };
+
+            return image.upload().await;
+        }
+        Err(anyhow!("No map found in {}", &self.gazette.uri))
+    }
 }
 
 impl Gazette {
@@ -40,25 +89,7 @@ impl Gazette {
         Document::load_mem(&bytes).map_err(|e| e.into())
     }
 
-    pub(crate) async fn save(&self) -> Result<bool> {
-        let mut hash = make_hash(&self.uri);
-
-        if self.flagged {
-            hash = format!("flagged:{hash}");
-        } else {
-            hash = format!("discarded:{hash}");
-        }
-
-        let db = DatabaseConnection {
-            provider: RedisProvider,
-        };
-
-        db.create_entry(&hash, self).await?;
-
-        Ok(true)
-    }
-
-    pub(crate) async fn try_upload_image(&self) -> Result<Option<String>> {
+    pub(crate) async fn extract_map(&self) -> Result<Vec<u8>> {
         let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
 
         let pdf = self.get_pdf().await?;
@@ -70,19 +101,10 @@ impl Gazette {
         }
 
         if let Some(map) = images.first() {
-            let hash = make_hash(&self.uri);
-
-            let image = Image {
-                filename: format!("./{hash}.jpg"),
-                data: Vec::from(map.content),
-                service: image_service::S3
-            };
-
-            image.upload().await
-        } else {
-            println!("No image found in {}", &self.uri);
-            Ok(None)
+            return Ok(Vec::from(map.content));
         }
+
+        Err(anyhow!("No map found in {}", &self.uri))
     }
 
     pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {

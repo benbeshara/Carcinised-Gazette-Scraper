@@ -1,5 +1,7 @@
+use crate::db::core::DatabaseProvider;
 use crate::db::redis::RedisProvider;
 use crate::db::DatabaseConnection;
+use crate::image_service::ImageService;
 use crate::utils::geojson::{
     GeoJsonFeature, GeoJsonFeatureCollection, GeoJsonGeometry, GeoJsonProperties,
 };
@@ -11,6 +13,7 @@ use crate::web::templates::components::{
 use crate::web::templates::styles::get_styles;
 use axum::{
     self,
+    extract::State,
     response::sse::{Event, Sse},
     routing::get,
     Router,
@@ -21,12 +24,27 @@ use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, env, time::Duration};
 
-pub async fn start_server() {
+#[derive(Clone)]
+pub struct ServerConfig<T, U>
+where
+    T: DatabaseProvider + Clone + Send + Sync,
+    U: ImageService + Clone + Send + Sync,
+{
+    pub database_provider: T,
+    pub image_service: U,
+}
+
+pub async fn start_server<T, U>(config: ServerConfig<T, U>)
+where
+    T: DatabaseProvider + Clone + Send + Sync + 'static,
+    U: ImageService + Clone + Copy + Send + Sync + 'static,
+{
     let app = Router::new()
         .route("/", get(landing))
-        .route("/data", get(list_sse));
+        .route("/data", get(list_sse))
+        .with_state(config);
 
-    let port: u16 = std::env::var("PORT")
+    let port: u16 = env::var("PORT")
         .unwrap_or_else(|_| "3000".to_string()) // Get the port as a string or default to "3000"
         .parse() // Parse the port string into a u16
         .expect("Failed to parse PORT");
@@ -37,10 +55,18 @@ pub async fn start_server() {
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
+async fn list_sse<T, U>(
+    State(state): State<ServerConfig<T, U>>,
+) -> Sse<impl Stream<Item = Result<Event, Infallible>>>
+where
+    T: DatabaseProvider + Clone + Send + Sync + 'static,
+    U: ImageService + Clone + Copy + Send + Sync + 'static,
+{
     let updater = Updater {
         uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
         base_uri: "http://www.gazette.vic.gov.au".to_string(),
+        database_provider: state.database_provider,
+        image_service: state.image_service,
     };
 
     let (tx, rx) = tokio::sync::mpsc::channel(32);

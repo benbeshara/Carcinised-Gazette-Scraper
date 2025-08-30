@@ -1,7 +1,7 @@
-use std::env;
+use crate::image_service::core::ImageService;
 use anyhow::{anyhow, Result};
 use s3::creds::Credentials;
-use crate::image_service::core::ImageService;
+use std::env;
 
 #[derive(Clone, Copy, Debug)]
 pub struct S3;

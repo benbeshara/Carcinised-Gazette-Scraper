@@ -2,7 +2,9 @@ use crate::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};
 use redis::{Connection, TypedCommands};
+use serde::Serialize;
 
+#[derive(Clone, Default, Serialize)]
 pub struct RedisProvider;
 
 impl RedisProvider {
