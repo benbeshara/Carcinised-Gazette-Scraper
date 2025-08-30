@@ -6,25 +6,30 @@ mod utils;
 mod web;
 
 use crate::db::redis::RedisProvider;
-use crate::web::{start_server, ServerConfig};
-use utils::updater::Updater;
+use crate::geocoder::google::GoogleGeocoderProvider;
+use crate::image_service::S3;
+use crate::location_parser::openai::OpenAI;
+use crate::utils::updater::ServiceConfig;
+use crate::utils::updater::Updater;
+use crate::web::start_server;
 
 #[tokio::main]
 async fn main() {
+    let config = ServiceConfig {
+        database_provider: RedisProvider,
+        image_service: S3,
+        location_parser: OpenAI,
+        geocoder: GoogleGeocoderProvider,
+    };
+
     let updater = Updater {
         uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
         base_uri: "http://www.gazette.vic.gov.au".to_string(),
-        database_provider: RedisProvider,
-        image_service: image_service::S3,
+        config: config.clone(),
     };
     let update = tokio::spawn(async move {
         let _ = updater.update().await;
     });
-
-    let config = ServerConfig {
-        database_provider: RedisProvider,
-        image_service: image_service::S3,
-    };
 
     let server = tokio::spawn(start_server(config));
     let (_, _) = tokio::join!(update, server);

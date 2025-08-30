@@ -9,7 +9,7 @@ pub trait GeocoderProvider {
 #[derive(Clone, Debug)]
 pub struct GeocoderRequest<T>
 where
-    T: GeocoderProvider + Copy,
+    T: GeocoderProvider,
 {
     pub input: String,
     pub service: T,
@@ -17,7 +17,7 @@ where
 
 impl<T> GeocoderRequest<T>
 where
-    T: GeocoderProvider + Copy,
+    T: GeocoderProvider,
 {
     pub async fn geocode(&self) -> Result<GeoPosition> {
         self.service.geocode(&self.input).await

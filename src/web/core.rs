@@ -1,11 +1,13 @@
 use crate::db::core::DatabaseProvider;
 use crate::db::redis::RedisProvider;
 use crate::db::DatabaseConnection;
+use crate::geocoder::core::GeocoderProvider;
 use crate::image_service::ImageService;
+use crate::location_parser::core::LocationParserService;
 use crate::utils::geojson::{
     GeoJsonFeature, GeoJsonFeatureCollection, GeoJsonGeometry, GeoJsonProperties,
 };
-use crate::utils::updater::Updater;
+use crate::utils::updater::{ServiceConfig, Updater};
 use crate::web::templates::base::base_template;
 use crate::web::templates::components::{
     footer_section, header_section, list_section, map_section, notice_section,
@@ -24,20 +26,12 @@ use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, env, time::Duration};
 
-#[derive(Clone)]
-pub struct ServerConfig<T, U>
-where
-    T: DatabaseProvider + Clone + Send + Sync,
-    U: ImageService + Clone + Send + Sync,
-{
-    pub database_provider: T,
-    pub image_service: U,
-}
-
-pub async fn start_server<T, U>(config: ServerConfig<T, U>)
+pub async fn start_server<T, U, V, W>(config: ServiceConfig<T, U, V, W>)
 where
     T: DatabaseProvider + Clone + Send + Sync + 'static,
     U: ImageService + Clone + Copy + Send + Sync + 'static,
+    V: LocationParserService + Clone + Copy + Send + Sync + 'static,
+    W: GeocoderProvider + Clone + Copy + Send + Sync + 'static,
 {
     let app = Router::new()
         .route("/", get(landing))
@@ -55,18 +49,19 @@ where
     axum::serve(listener, app).await.unwrap();
 }
 
-async fn list_sse<T, U>(
-    State(state): State<ServerConfig<T, U>>,
+async fn list_sse<T, U, V, W>(
+    State(state): State<ServiceConfig<T, U, V, W>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>>
 where
     T: DatabaseProvider + Clone + Send + Sync + 'static,
     U: ImageService + Clone + Copy + Send + Sync + 'static,
+    V: LocationParserService + Clone + Copy + Send + Sync + 'static,
+    W: GeocoderProvider + Clone + Copy + Send + Sync + 'static,
 {
     let updater = Updater {
         uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
         base_uri: "http://www.gazette.vic.gov.au".to_string(),
-        database_provider: state.database_provider,
-        image_service: state.image_service,
+        config: state.clone(),
     };
 
     let (tx, rx) = tokio::sync::mpsc::channel(32);

@@ -1,6 +1,8 @@
 use crate::db::core::DatabaseProvider;
 use crate::db::DatabaseConnection;
+use crate::geocoder::core::GeocoderProvider;
 use crate::image_service::ImageService;
+use crate::location_parser::core::LocationParserService;
 use crate::utils::gazette::{make_hash, Gazette, GazetteHandler};
 use anyhow::Result;
 use futures::stream::StreamExt;
@@ -11,21 +13,38 @@ const FIRST_PAGE: u32 = 1;
 const TARGET_TEXT: &str = "Control of Weapons Act 1990";
 
 #[derive(Clone, Debug)]
-pub struct Updater<T, U>
+pub struct ServiceConfig<T, U, V, W>
 where
-    T: DatabaseProvider + Clone,
-    U: ImageService + Copy,
+    T: DatabaseProvider + Clone + Send + Sync,
+    U: ImageService + Clone + Send + Sync,
+    V: LocationParserService + Clone + Send + Sync,
+    W: GeocoderProvider + Clone + Send + Sync,
+{
+    pub database_provider: T,
+    pub image_service: U,
+    pub location_parser: V,
+    pub geocoder: W,
+}
+
+#[derive(Clone, Debug)]
+pub struct Updater<T, U, V, W>
+where
+    T: DatabaseProvider + Clone + Send + Sync,
+    U: ImageService + Copy + Send + Sync,
+    V: LocationParserService + Clone + Send + Sync,
+    W: GeocoderProvider + Clone + Send + Sync,
 {
     pub uri: String,
     pub base_uri: String,
-    pub database_provider: T,
-    pub image_service: U,
+    pub config: ServiceConfig<T, U, V, W>,
 }
 
-impl<T, U> Updater<T, U>
+impl<T, U, V, W> Updater<T, U, V, W>
 where
-    T: DatabaseProvider + Clone,
-    U: ImageService + Copy,
+    T: DatabaseProvider + Clone + Send + Sync,
+    U: ImageService + Copy + Send + Sync,
+    V: LocationParserService + Clone + Send + Sync,
+    W: GeocoderProvider + Clone + Send + Sync,
 {
     pub async fn update(&self) -> Result<Vec<String>> {
         let results = self.parse_webpage().await?;
@@ -35,7 +54,7 @@ where
                 let (_, uri) = &result;
                 let hash = make_hash(uri);
                 let db = DatabaseConnection {
-                    provider: self.database_provider.clone(),
+                    provider: self.config.database_provider.clone(),
                 };
 
                 match db.has_entry(&hash).await {
@@ -63,15 +82,17 @@ where
                     flagged: true,
                     ..Default::default()
                 },
-                database_provider: self.database_provider.clone(),
-                image_service: self.image_service,
+                database_provider: self.config.database_provider.clone(),
+                image_service: self.config.image_service,
+                location_parser: self.config.location_parser.clone(),
+                geocoder: self.config.geocoder.clone(),
             };
 
             if let Ok(img) = gazette_handler.try_upload_image().await {
                 gazette_handler.gazette.img_uri = img;
             }
 
-            if let Ok(polygon) = gazette_handler.gazette.get_polygon().await {
+            if let Ok(polygon) = gazette_handler.get_polygon().await {
                 gazette_handler.gazette.polygon = polygon;
             }
 
@@ -91,8 +112,10 @@ where
                     title: Some(title),
                     ..Default::default()
                 },
-                database_provider: self.database_provider.clone(),
-                image_service: self.image_service,
+                database_provider: self.config.database_provider.clone(),
+                image_service: self.config.image_service,
+                location_parser: self.config.location_parser.clone(),
+                geocoder: self.config.geocoder.clone(),
             };
 
             let _ = gazette_handler.save().await;

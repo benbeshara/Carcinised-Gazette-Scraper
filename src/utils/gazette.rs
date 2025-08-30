@@ -1,9 +1,9 @@
 use crate::db::core::DatabaseProvider;
 use crate::db::DatabaseConnection;
-use crate::geocoder::google::GoogleGeocoderProvider;
+use crate::geocoder::core::GeocoderProvider;
 use crate::geocoder::GeocoderRequest;
 use crate::image_service::{Image, ImageService};
-use crate::location_parser::openai::OpenAI;
+use crate::location_parser::core::LocationParserService;
 use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
 use anyhow::{anyhow, Result};
@@ -27,14 +27,18 @@ pub struct Gazette {
     pub end: Option<NaiveDate>,
 }
 
-pub struct GazetteHandler<T, U>
+pub struct GazetteHandler<T, U, V, W>
 where
     T: DatabaseProvider,
     U: ImageService,
+    V: LocationParserService,
+    W: GeocoderProvider,
 {
     pub gazette: Gazette,
     pub database_provider: T,
     pub image_service: U,
+    pub location_parser: V,
+    pub geocoder: W,
 }
 
 pub fn make_hash(key: &str) -> String {
@@ -43,10 +47,12 @@ pub fn make_hash(key: &str) -> String {
     format!("{:x}", hasher.finalize())
 }
 
-impl<T, U> GazetteHandler<T, U>
+impl<T, U, V, W> GazetteHandler<T, U, V, W>
 where
     T: DatabaseProvider + Clone,
     U: ImageService + Copy,
+    V: LocationParserService + Clone,
+    W: GeocoderProvider + Clone,
 {
     pub(crate) async fn save(&self) -> Result<bool> {
         let mut hash = make_hash(&self.gazette.uri);
@@ -80,6 +86,29 @@ where
         }
         Err(anyhow!("No map found in {}", &self.gazette.uri))
     }
+
+    pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
+        let page_text = &self.gazette.get_doc_text().await?;
+        let loc = LocationParser {
+            provider: self.location_parser.clone(),
+            locations: page_text.to_owned(),
+        };
+        let places = loc.parse_locations().await?;
+        let futures = places.into_iter().map(|place| async move {
+            let gc = GeocoderRequest {
+                service: self.geocoder.clone(),
+                input: place,
+            };
+            gc.geocode().await.unwrap_or_default()
+        });
+        let mut polygon = futures::future::join_all(futures).await;
+        polygon.sanitise();
+        Ok(Some(MapPolygon { data: polygon }))
+    }
+
+    pub(crate) async fn get_date(&self) -> Result<(NaiveDate, NaiveDate)> {
+        self.gazette.get_date().await
+    }
 }
 
 impl Gazette {
@@ -107,30 +136,15 @@ impl Gazette {
         Err(anyhow!("No map found in {}", &self.uri))
     }
 
-    pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
+    pub(crate) async fn get_doc_text(&self) -> Result<String> {
         let pdf = self.get_pdf().await?;
 
+        let mut doc_text = String::new();
         for page in pdf.get_pages() {
-            if let Ok(page_text) = &mut pdf.extract_text(&[page.0]) {
-                let loc = LocationParser {
-                    provider: OpenAI,
-                    locations: page_text.to_owned(),
-                };
-                if let Ok(places) = loc.parse_locations().await {
-                    let futures = places.into_iter().map(|place| async move {
-                        let gc = GeocoderRequest {
-                            service: GoogleGeocoderProvider,
-                            input: place,
-                        };
-                        gc.geocode().await.unwrap_or_default()
-                    });
-                    let mut polygon = futures::future::join_all(futures).await;
-                    polygon.sanitise();
-                    return Ok(Some(MapPolygon { data: polygon }));
-                }
-            }
+            let page_text = &mut pdf.extract_text(&[page.0])?;
+            doc_text += page_text;
         }
-        Ok(None)
+        Ok(doc_text)
     }
 
     fn parse_date_text(date_string: &str) -> Result<Vec<NaiveDate>> {

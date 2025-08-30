@@ -31,6 +31,7 @@ impl From<OpenAIResponse> for Vec<String> {
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct OpenAI;
 
 #[async_trait::async_trait]
