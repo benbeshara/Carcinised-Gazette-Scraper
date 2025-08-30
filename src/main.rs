@@ -22,15 +22,15 @@ async fn main() {
         geocoder: GoogleGeocoderProvider,
     };
 
-    let updater = Updater {
-        uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
-        base_uri: "http://www.gazette.vic.gov.au".to_string(),
-        config: config.clone(),
-    };
+    let server = tokio::spawn(start_server(config.clone()));
+
     let update = tokio::spawn(async move {
-        let _ = updater.update().await;
+        let _ = Updater {
+            uri: "http://www.gazette.vic.gov.au/gazette_bin/gazette_archives.cfm".to_string(),
+            base_uri: "http://www.gazette.vic.gov.au".to_string(),
+            config,
+        }.update().await;
     });
 
-    let server = tokio::spawn(start_server(config));
     let (_, _) = tokio::join!(update, server);
 }
