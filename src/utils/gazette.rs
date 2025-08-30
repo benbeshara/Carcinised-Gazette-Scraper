@@ -128,6 +128,26 @@ impl Gazette {
         Ok(None)
     }
 
+    fn parse_date_text(date_string: &str) -> Result<Vec<NaiveDate>> {
+        let mut date_result = Vec::new();
+        let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b")?;
+        let current_year = Local::now().year();
+
+        for cap in date_regex.captures_iter(&date_string) {
+            if let Some(date_str) = cap.get(0) {
+                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y").or_else(|_| {
+                    let with_year = format!("{} {}", date_str.as_str(), current_year);
+                    NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
+                }) {
+                    Ok(parsed_date) => date_result.push(parsed_date),
+                    Err(_) => continue,
+                }
+            }
+        }
+
+        Ok(date_result)
+    }
+
     pub(crate) async fn get_date(&self) -> Result<(NaiveDate, NaiveDate)> {
         let pdf = self.get_pdf().await?;
 
@@ -149,23 +169,7 @@ impl Gazette {
             .trim()
             .to_string();
 
-        let mut date_result = Vec::new();
-        let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b")?;
-        let current_year = Local::now().year();
-
-        for cap in date_regex.captures_iter(&date_string) {
-            if let Some(date_str) = cap.get(0) {
-                let d = date_str.as_str();
-                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y")
-                    .or_else(|_| {
-                        let with_year = format!("{} {}", date_str.as_str(), current_year);
-                        NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
-                    }) {
-                    Ok(parsed_date) => date_result.push(parsed_date),
-                    Err(_) => continue,
-                }
-            }
-        }
+        let mut date_result = Gazette::parse_date_text(&date_string)?;
 
         if date_result.is_empty() {
             Err(anyhow!("No dates found in {}", &self.uri))?
@@ -181,59 +185,85 @@ impl Gazette {
     }
 }
 
-#[tokio::test]
-async fn test_parse_date() {
-    let gazette = Gazette {
-        uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
-        title: None,
-        img_uri: None,
-        flagged: false,
-        polygon: None,
-        start: None,
-        end: None,
-    };
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let date_range = gazette.get_date().await.unwrap();
-    assert!(date_range.0 < date_range.1);
-}
+    #[tokio::test]
+    async fn test_parse_date() {
+        let gazette = Gazette {
+            uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+            ..Default::default()
+        };
 
-#[test]
-fn test_date_regex() {
-    let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October 2025";
-    let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b").unwrap();
-    let mut date_result = Vec::new();
-    let current_year = Local::now().year();
-
-    for cap in date_regex.captures_iter(&date_string) {
-        if let Some(date_str) = cap.get(0) {
-            let d = date_str.as_str();
-            match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y")
-                .or_else(|_| {
-                    let with_year = format!("{} {}", date_str.as_str(), current_year);
-                    NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
-                }) {
-                Ok(parsed_date) => date_result.push(parsed_date),
-                Err(_) => continue,
-            }
-        }
+        let date_range = gazette.get_date().await.unwrap();
+        assert!(date_range.0 < date_range.1);
     }
 
-    assert_eq!(date_result.len(), 2);
-}
+    #[test]
+    fn test_date_regex() {
+        let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October 2025";
+        let date_result = Gazette::parse_date_text(&date_string);
 
-#[tokio::test]
-async fn test_get_polygon() {
-    let gazette = Gazette {
-        uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
-        title: None,
-        img_uri: None,
-        flagged: false,
-        polygon: None,
-        start: None,
-        end: None,
-    };
+        assert!(
+            date_result.is_ok(),
+            "Date regex failed to parse date string: {}",
+            date_string
+        );
 
-    let polygon = gazette.get_polygon().await.unwrap();
+        let dates = date_result.unwrap();
+        assert_eq!(dates.len(), 2);
+        assert_eq!(
+            dates[0],
+            NaiveDate::from_ymd_opt(Local::now().year(), 9, 1).unwrap()
+        );
+        assert_eq!(dates[1], NaiveDate::from_ymd_opt(2025, 10, 11).unwrap());
 
-    assert!(polygon.is_some());
+        let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October";
+        let date_result = Gazette::parse_date_text(&date_string);
+
+        assert!(
+            date_result.is_ok(),
+            "Date regex failed to parse date string: {}",
+            date_string
+        );
+
+        let dates = date_result.unwrap();
+        assert_eq!(dates.len(), 2);
+        assert_eq!(
+            dates[0],
+            NaiveDate::from_ymd_opt(Local::now().year(), 9, 1).unwrap()
+        );
+        assert_eq!(
+            dates[1],
+            NaiveDate::from_ymd_opt(Local::now().year(), 10, 11).unwrap()
+        );
+
+        let date_string =
+            "1.00 pm on Monday 1 September 2199, to 1.59 am on Saturday 11 October 2275";
+        let date_result = Gazette::parse_date_text(&date_string);
+
+        assert!(
+            date_result.is_ok(),
+            "Date regex failed to parse date string: {}",
+            date_string
+        );
+
+        let dates = date_result.unwrap();
+        assert_eq!(dates.len(), 2);
+        assert_eq!(dates[0], NaiveDate::from_ymd_opt(2199, 9, 1).unwrap());
+        assert_eq!(dates[1], NaiveDate::from_ymd_opt(2275, 10, 11).unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_get_polygon() {
+        let gazette = Gazette {
+            uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+            ..Default::default()
+        };
+
+        let polygon = gazette.get_polygon().await.unwrap();
+
+        assert!(polygon.is_some());
+    }
 }

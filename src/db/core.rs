@@ -33,3 +33,24 @@ where
         T::fetch_entries(&self.provider).await
     }
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::db::mock::MockDatabaseProvider;
+
+    #[tokio::test]
+    async fn test_database_connection() {
+        let provider = MockDatabaseProvider::new();
+        let connection = DatabaseConnection { provider };
+
+        let gazette = Gazette::default();
+        let id = "test123";
+
+        assert!(connection.create_entry(id, &gazette).await.unwrap());
+        assert!(connection.has_entry(id).await.unwrap());
+
+        let entries = connection.fetch_entries().await.unwrap();
+        assert_eq!(entries.len(), 1);
+    }
+}

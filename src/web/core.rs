@@ -15,11 +15,11 @@ use axum::{
     routing::get,
     Router,
 };
+use chrono::{Local, TimeDelta};
 use futures::stream::Stream;
 use maud::{html, Markup, PreEscaped};
 use std::net::SocketAddr;
 use std::{convert::Infallible, env, time::Duration};
-use chrono::{Local, TimeDelta};
 
 pub async fn start_server() {
     let app = Router::new()
@@ -52,9 +52,9 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
         });
 
         while !update_task.is_finished() {
-            let _ = tx.send(Ok(Event::default()
-                .data("updating...")
-                .event("heartbeat"))).await;
+            let _ = tx
+                .send(Ok(Event::default().data("updating...").event("heartbeat")))
+                .await;
             tokio::time::sleep(Duration::from_secs(1)).await;
         }
 
@@ -64,15 +64,13 @@ async fn list_sse() -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
         let polygons_future = fetch_polygons();
         let (data, polygons) = tokio::join!(data_future, polygons_future);
 
-        let _ = tx.send(Ok(Event::default()
-            .data("update complete")
-            .event("update"))).await;
-        let _ = tx.send(Ok(Event::default()
-            .data(data)
-            .event("list"))).await;
-        let _ = tx.send(Ok(Event::default()
-            .data(polygons)
-            .event("close"))).await;
+        let _ = tx
+            .send(Ok(Event::default().data("update complete").event("update")))
+            .await;
+        let _ = tx.send(Ok(Event::default().data(data).event("list"))).await;
+        let _ = tx
+            .send(Ok(Event::default().data(polygons).event("close")))
+            .await;
     });
 
     Sse::new(stream).keep_alive(
