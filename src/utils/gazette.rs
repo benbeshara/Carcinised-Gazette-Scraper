@@ -5,17 +5,15 @@ use crate::geocoder::GeocoderRequest;
 use crate::location_parser::openai::OpenAI;
 use crate::location_parser::LocationParser;
 use crate::utils::maptypes::{MapPolygon, Sanitise};
+use crate::{image_service, image_service::Image};
 use anyhow::{anyhow, Result};
 use chrono::{Datelike, Local, NaiveDate};
 use lopdf::Document;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
-use s3;
-use s3::creds::Credentials;
 use serde::{Deserialize, Serialize};
 use serde_with::chrono;
 use sha1::{digest::core_api::CoreWrapper, Digest, Sha1, Sha1Core};
-use std::env;
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[allow(dead_code)]
@@ -71,31 +69,16 @@ impl Gazette {
             }
         }
 
-        if let Some(image) = images.first() {
+        if let Some(map) = images.first() {
             let hash = make_hash(&self.uri);
-            let filename = format!("./{hash}.jpg");
 
-            if let Ok(access_key) = env::var("OBJECT_STORAGE_ACCESS_KEY_ID") {
-                if let Ok(secret_key) = env::var("OBJECT_STORAGE_SECRET_ACCESS_KEY") {
-                    let bucket = s3::Bucket::new(
-                        "vicpolsearches",
-                        s3::Region::ApSoutheast2,
-                        Credentials {
-                            access_key: Some(access_key),
-                            secret_key: Some(secret_key),
-                            security_token: None,
-                            session_token: None,
-                            expiration: None,
-                        },
-                    )?;
+            let image = Image {
+                filename: format!("./{hash}.jpg"),
+                data: Vec::from(map.content),
+                service: image_service::S3
+            };
 
-                    let _ = bucket.put_object(&filename, image.content).await?;
-                    return Ok(Some(filename));
-                }
-                Err(anyhow!("No object storage credentials provided"))?
-            } else {
-                Err(anyhow!("No object storage credentials provided"))?
-            }
+            image.upload().await
         } else {
             println!("No image found in {}", &self.uri);
             Ok(None)

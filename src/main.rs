@@ -3,6 +3,7 @@ mod geocoder;
 mod location_parser;
 mod utils;
 mod web;
+mod image_service;
 
 use utils::updater::Updater;
 use web::start_server;
