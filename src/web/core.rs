@@ -194,13 +194,24 @@ async fn render_list() -> String {
     let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
         let acc = gazettes.iter().fold(String::new(), |mut acc, gz| {
+            let (title, published) = gz.title
+                .as_deref()
+                .and_then(|title| title.split_once(" Dated ")).unwrap_or(("Failed to parse Title", "Failed to parse published date"));
             acc += html!(
                 li {
                     div {
                         span {
                             a href=(gz.uri) target="_blank" {
-                                @if let Some(title) = &gz.title {
+                                span.title {
                                     (title)
+                                }
+                                span.published {
+                                    "Published " (published)
+                                }
+                                @if let (Some(start_date), Some(end_date)) = (&gz.start, &gz.end) {
+                                    span.time {
+                                        "Enforced from " (start_date.format("%A %e %B %Y")) " to " (end_date.format("%A %e %B %Y"))
+                                    }
                                 }
                                 span.uri {
                                     (gz.uri)

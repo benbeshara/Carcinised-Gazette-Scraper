@@ -19,6 +19,17 @@ span.subheading {
     white-space: normal;
     margin-bottom: 1rem;
 }
+span.title {
+    display: block;
+}
+span.published {
+    font-size: 1.0rem;
+    display: block;
+}
+span.time {
+    font-size: 1.0rem;
+    display: block;
+}
 div#map {
     height: 600px;
     margin: 0 -1rem;
