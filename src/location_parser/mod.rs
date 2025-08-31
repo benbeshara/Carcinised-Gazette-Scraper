@@ -1,5 +1,5 @@
 pub mod core;
-mod mock;
+pub(crate) mod mock;
 pub mod openai;
 
 use core::*;

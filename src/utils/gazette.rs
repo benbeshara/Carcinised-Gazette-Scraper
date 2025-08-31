@@ -275,14 +275,25 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_polygon() {
-        let gazette = Gazette {
-            uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
-            ..Default::default()
+    async fn test_gazette_extraction() {
+        let gazette = GazetteHandler {
+            gazette: Gazette
+            {
+                uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+                ..Default::default()
+            },
+            database_provider: crate::db::mock::MockDatabaseProvider::new(),
+            image_service: crate::image_service::mock::MockImageService::new(true),
+            location_parser: crate::location_parser::mock::MockLocationParser::new(),
+            geocoder: crate::geocoder::mock::MockGeocoderProvider { },
         };
 
         let polygon = gazette.get_polygon().await.unwrap();
+        let image = gazette.try_upload_image().await.unwrap();
+        let date_range = gazette.get_date().await.unwrap();
 
         assert!(polygon.is_some());
+        assert!(image.is_some());
+        assert!(date_range.0 < date_range.1);
     }
 }

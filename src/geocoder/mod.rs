@@ -1,7 +1,7 @@
 pub mod azure;
 pub mod core;
 pub mod google;
-mod mock;
+pub(crate) mod mock;
 
 use core::*;
 

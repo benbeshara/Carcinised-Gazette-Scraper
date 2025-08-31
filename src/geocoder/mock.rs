@@ -2,7 +2,7 @@ use crate::{geocoder::GeocoderProvider, utils::maptypes::GeoPosition};
 use anyhow::Result;
 use std::collections::HashMap;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Default)]
 pub struct MockGeocoderProvider;
 
 impl MockGeocoderProvider {
