@@ -17,15 +17,15 @@ function updatePolygons(geojsonData) {
             let date = Date.now()
             let falloff = date - MS_PER_DAY * 30;
 
-            if(end < date){
+            if(beyond < date){
                 return
-            }
-            if(date > beyond){
-                return {
-                    color: '#4444ff',
-                    weight: 2,
-                    opacity: 0.25
-                }
+            // }
+            // if(date > beyond){
+            //     return {
+            //         color: '#4444ff',
+            //         weight: 2,
+            //         opacity: 0.25
+            //     }
             } else if(start <= date){
                 return {
                     color: '#ff0000',
@@ -34,7 +34,7 @@ function updatePolygons(geojsonData) {
                 }
             }
             return {
-                color: '#ff6200',
+                color: '#ffb516',
                 weight: 2,
                 opacity: 0.25
             };
