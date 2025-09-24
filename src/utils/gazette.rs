@@ -177,13 +177,13 @@ impl Gazette {
         }
 
         let declaration_start_index = all_text
-            .find("This declaration will be in place from")
+            .find("This declaration will be in place")
             .ok_or(anyhow!("Could not find date identifier"))?;
         let search_text = &all_text[declaration_start_index..].replace('\n', "");
         let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
 
         let date_string = search_text
-            ["This declaration will be in place from".len()..declaration_end_index]
+            ["This declaration will be in place".len()..declaration_end_index]
             .trim()
             .to_string();
 
