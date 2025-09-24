@@ -32,6 +32,7 @@ impl From<MapPolygon> for String {
 }
 
 impl MapPolygon {
+    #[allow(clippy::cast_precision_loss)]
     pub fn centre(&self) -> GeoPosition {
         let count = self.data.len() as f64;
         let sum = self.data.iter().fold(
@@ -52,11 +53,12 @@ impl MapPolygon {
         }
     }
 
+    #[allow(clippy::float_cmp)]
     pub fn convex_hull(&self) -> Self {
         let points = self.data.clone();
         if points.len() < 3 {
             return MapPolygon {
-                data: points.to_vec(),
+                data: points.clone(),
             };
         }
 
@@ -106,6 +108,7 @@ impl MapPolygon {
         MapPolygon { data: hull }
     }
 
+    #[allow(clippy::cast_precision_loss)]
     pub fn remove_outliers_by_proximity(&mut self, threshold: f64, buffer_km: f64) -> &mut Self {
         if self.data.len() < 4 {
             return self;
@@ -174,6 +177,7 @@ impl MapPolygon {
         self
     }
 
+    #[allow(clippy::float_cmp)]
     pub fn remove_identical_points(&mut self) -> &mut Self {
         if self.data.len() < 3 {
             return self;
@@ -181,7 +185,7 @@ impl MapPolygon {
 
         let mut filtered_data: Vec<GeoPosition> = Vec::new();
 
-        for point in self.data.iter() {
+        for point in &self.data {
             if !filtered_data
                 .iter()
                 .any(|p| p.latitude == point.latitude && p.longitude == point.longitude)
@@ -215,7 +219,7 @@ impl Sanitise for Vec<GeoPosition> {
         let victoria_lat_range = -39.2..=-33.9;
         let victoria_lon_range = 140.7..=149.0;
 
-        let _ = &self.retain(|point| {
+        let () = &self.retain(|point| {
             victoria_lat_range.contains(&point.latitude)
                 && victoria_lon_range.contains(&point.longitude)
         });

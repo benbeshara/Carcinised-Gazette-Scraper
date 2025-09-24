@@ -9,9 +9,7 @@ use crate::utils::geojson::{
 };
 use crate::utils::updater::{ServiceConfig, Updater};
 use crate::web::templates::base::base_template;
-use crate::web::templates::components::{
-    footer_section, header_section, list_section, map_section, notice_section,
-};
+use crate::web::templates::components::{footer_section, header_section, list_section, map_section, notice_section, update_notice};
 use crate::web::templates::styles::get_styles;
 use axum::{
     self,
@@ -140,7 +138,7 @@ async fn fetch_polygons() -> String {
                 }
 
                 if let Some(img) = &gazette.img_uri {
-                    img_uri = Some(format!("{}{}", base_uri, img));
+                    img_uri = Some(format!("{base_uri}{img}"));
                 }
 
                 let processed_polygon = polygon
@@ -149,22 +147,20 @@ async fn fetch_polygons() -> String {
                     .remove_identical_points()
                     .clone();
 
-                let geometry;
-
-                if processed_polygon.data.len() < 3 {
-                    geometry = GeoJsonGeometry::Point {
+                let geometry = if processed_polygon.data.len() < 3 {
+                    GeoJsonGeometry::Point {
                         coordinates: processed_polygon.centre().into(),
-                    };
+                    }
                 } else {
-                    geometry = GeoJsonGeometry::Polygon {
+                    GeoJsonGeometry::Polygon {
                         coordinates: vec![processed_polygon
                             .convex_hull()
                             .data
                             .iter()
                             .map(|point| [point.longitude, point.latitude])
                             .collect::<Vec<[f64; 2]>>()],
-                    };
-                }
+                    }
+                };
 
                 let feature = GeoJsonFeature {
                     type_field: "Feature".to_string(),
@@ -242,12 +238,13 @@ async fn landing() -> Markup {
     let initial_polygons = fetch_polygons().await;
     let initial_list_content = initial_list().await;
 
-    base_template(html! {
+    base_template(&html! {
         div.center {
             (header_section())
+            (update_notice())
             (notice_section())
             (map_section())
-            (list_section(initial_list_content))
+            (list_section(&initial_list_content))
             (footer_section())
         }
         (get_styles())

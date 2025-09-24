@@ -24,7 +24,7 @@ struct OpenAIResponse {
 impl From<OpenAIResponse> for Vec<String> {
     fn from(value: OpenAIResponse) -> Self {
         let mut ret = Vec::new();
-        for v in value.choices[0].clone().message.content.split("\n") {
+        for v in value.choices[0].clone().message.content.split('\n') {
             ret.push(v.to_string());
         }
         ret
@@ -75,7 +75,7 @@ impl LocationParserService for OpenAI {
 
         res.json::<OpenAIResponse>()
             .await
-            .map(|r| r.into())
+            .map(Into::into)
             .map_err(Into::into)
     }
 }

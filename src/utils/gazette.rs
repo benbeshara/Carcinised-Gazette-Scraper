@@ -115,7 +115,7 @@ impl Gazette {
     async fn get_pdf(&self) -> Result<Document> {
         let req = reqwest::get(&self.uri).await?;
         let bytes = req.bytes().await?;
-        Document::load_mem(&bytes).map_err(|e| e.into())
+        Document::load_mem(&bytes).map_err(Into::into)
     }
 
     pub(crate) async fn extract_map(&self) -> Result<Vec<u8>> {
@@ -125,7 +125,7 @@ impl Gazette {
 
         for page in pdf.get_pages() {
             if let Ok(page_images) = &mut pdf.get_page_images(page.1) {
-                images.append(page_images)
+                images.append(page_images);
             }
         }
 
@@ -152,14 +152,13 @@ impl Gazette {
         let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b")?;
         let current_year = Local::now().year();
 
-        for cap in date_regex.captures_iter(&date_string) {
+        for cap in date_regex.captures_iter(date_string) {
             if let Some(date_str) = cap.get(0) {
-                match NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y").or_else(|_| {
+                if let Ok(parsed_date) = NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y").or_else(|_| {
                     let with_year = format!("{} {}", date_str.as_str(), current_year);
                     NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
                 }) {
-                    Ok(parsed_date) => date_result.push(parsed_date),
-                    Err(_) => continue,
+                    date_result.push(parsed_date);
                 }
             }
         }
@@ -180,7 +179,7 @@ impl Gazette {
         let declaration_start_index = all_text
             .find("This declaration will be in place from")
             .ok_or(anyhow!("Could not find date identifier"))?;
-        let search_text = &all_text[declaration_start_index..].replace("\n", "");
+        let search_text = &all_text[declaration_start_index..].replace('\n', "");
         let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
 
         let date_string = search_text
@@ -191,7 +190,7 @@ impl Gazette {
         let mut date_result = Gazette::parse_date_text(&date_string)?;
 
         if date_result.is_empty() {
-            Err(anyhow!("No dates found in {}", &self.uri))?
+            Err(anyhow!("No dates found in {}", &self.uri))?;
         }
         date_result.sort();
         let start = date_result[0];
@@ -222,12 +221,11 @@ mod tests {
     #[test]
     fn test_date_regex() {
         let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October 2025";
-        let date_result = Gazette::parse_date_text(&date_string);
+        let date_result = Gazette::parse_date_text(date_string);
 
         assert!(
             date_result.is_ok(),
-            "Date regex failed to parse date string: {}",
-            date_string
+            "Date regex failed to parse date string: {date_string}",
         );
 
         let dates = date_result.unwrap();
@@ -239,12 +237,11 @@ mod tests {
         assert_eq!(dates[1], NaiveDate::from_ymd_opt(2025, 10, 11).unwrap());
 
         let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October";
-        let date_result = Gazette::parse_date_text(&date_string);
+        let date_result = Gazette::parse_date_text(date_string);
 
         assert!(
             date_result.is_ok(),
-            "Date regex failed to parse date string: {}",
-            date_string
+            "Date regex failed to parse date string: {date_string}",
         );
 
         let dates = date_result.unwrap();
@@ -260,12 +257,11 @@ mod tests {
 
         let date_string =
             "1.00 pm on Monday 1 September 2199, to 1.59 am on Saturday 11 October 2275";
-        let date_result = Gazette::parse_date_text(&date_string);
+        let date_result = Gazette::parse_date_text(date_string);
 
         assert!(
             date_result.is_ok(),
-            "Date regex failed to parse date string: {}",
-            date_string
+            "Date regex failed to parse date string: {date_string}"
         );
 
         let dates = date_result.unwrap();

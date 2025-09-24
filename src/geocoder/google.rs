@@ -35,8 +35,8 @@ impl GeocoderProvider for GoogleGeocoderProvider {
     async fn geocode(&self, input: &str) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("GOOGLE_MAPS_API_KEY") {
             let client = Client::new();
-            let req = format!("{input}, VICTORIA, AUSTRALIA");
-            let request = format!("https://maps.googleapis.com/maps/api/geocode/json?key={api_key}&api-version=1.0&language=en-AU&region=AU&address={req}");
+            let input = format!("{input}, VICTORIA, AUSTRALIA");
+            let request = format!("https://maps.googleapis.com/maps/api/geocode/json?key={api_key}&api-version=1.0&language=en-AU&region=AU&address={input}");
             let res = client.get(request).send().await?;
 
             let body = res.json::<GoogleGeocoderResponse>().await?;

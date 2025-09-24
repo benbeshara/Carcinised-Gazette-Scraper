@@ -96,7 +96,7 @@ where
                 gazette_handler.gazette.polygon = polygon;
             }
 
-            if let Ok(date) = gazette_handler.gazette.get_date().await {
+            if let Ok(date) = gazette_handler.get_date().await {
                 gazette_handler.gazette.start = Some(date.0);
                 gazette_handler.gazette.end = Some(date.1);
             }
@@ -144,7 +144,9 @@ where
                     .attr("href")
                     .map(|href| (element.inner_html(), format!("{}{}", self.base_uri, href)))
             })
-            .filter(|(_, url)| url.ends_with(".pdf"))
+            .filter(|(_, url)| std::path::Path::new(url)
+                .extension()
+                .is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")))
             .collect();
 
         Ok(pdf_list)

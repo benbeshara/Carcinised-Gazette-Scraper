@@ -30,6 +30,18 @@ span.time {
     font-size: 1.0rem;
     display: block;
 }
+span.update {
+    font-size: 1.0rem;
+    background-color: #ff0000;
+    color: #fff;
+    padding: 0.25rem;
+    display: block;
+}
+span.update a {
+    font-size: 1.0rem;
+    color: #fff;
+    text-decoration: underline;
+}
 div#map {
     height: 600px;
     margin: 0 -1rem;

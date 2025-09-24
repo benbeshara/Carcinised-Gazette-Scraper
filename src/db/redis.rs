@@ -11,7 +11,7 @@ impl RedisProvider {
     const FLAGGED_PREFIX: &'static str = "flagged:";
     const DISCARDED_PREFIX: &'static str = "discarded:";
 
-    pub async fn check_key_exists(
+    pub fn check_key_exists(
         connection: &mut Connection,
         prefix: &str,
         id: &str,
@@ -44,9 +44,9 @@ impl DatabaseProvider for RedisProvider {
             .map_err(|e| anyhow!("Failed to connect to Redis: {}", e))?;
 
         let flagged_exists =
-            Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id).await?;
+            Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id)?;
         let discarded_exists =
-            Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id).await?;
+            Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id)?;
 
         let exists = flagged_exists || discarded_exists;
 
@@ -84,16 +84,16 @@ impl DatabaseProvider for RedisProvider {
                         if let Ok(gazette) =
                             Commands::get::<&String, Gazette>(&mut connection, &key)
                         {
-                            gazettes.push(gazette)
+                            gazettes.push(gazette);
                         }
                     })
                     .collect::<Vec<_>>();
-            };
+            }
 
             gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));
 
             return Ok(gazettes);
-        };
+        }
 
         Err(anyhow!("Could not fetch entries"))
     }

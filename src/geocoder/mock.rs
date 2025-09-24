@@ -51,6 +51,7 @@ mod tests {
     use crate::geocoder::GeocoderRequest;
 
     #[tokio::test]
+    #[allow(clippy::float_cmp)]
     async fn test_mock_geocoder() {
         let geocoder = MockGeocoderProvider {};
 
@@ -66,6 +67,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::float_cmp)]
     async fn test_geocoder_request() {
         let service = MockGeocoderProvider {};
         let request = GeocoderRequest {

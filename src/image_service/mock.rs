@@ -31,7 +31,7 @@ impl ImageService for MockImageService {
         UPLOAD_COUNT.fetch_add(1, Ordering::SeqCst);
 
         if self.should_succeed {
-            Ok(Some(format!("mock_url/{}", filename)))
+            Ok(Some(format!("mock_url/{filename}")))
         } else {
             Err(anyhow!("Mock upload failed"))
         }
