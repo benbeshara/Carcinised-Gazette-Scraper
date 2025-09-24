@@ -44,7 +44,7 @@ function updatePolygons(geojsonData) {
             const start_string = `${start_date.toLocaleDateString('en-AU', { dateStyle: 'full'})}`;
             const end_date = new Date(feature.properties.end);
             const end_string = `${end_date.toLocaleDateString('en-AU', { dateStyle: 'full' })}`;
-            const duration = `${Math.floor((end_date - start_date) / MS_PER_DAY)} day(s)`;
+            const duration = `${Math.floor((end_date - start_date + MS_PER_DAY) / MS_PER_DAY)} day(s)`;
             const time_until_start = Math.floor((start_date - Date.now()) / MS_PER_DAY);
             let start_notice = '';
             if(time_until_start > 0){
