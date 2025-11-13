@@ -35,7 +35,7 @@ impl MockGeocoderProvider {
 
 #[async_trait::async_trait]
 impl GeocoderProvider for MockGeocoderProvider {
-    async fn geocode(&self, input: &str) -> Result<GeoPosition> {
+    async fn geocode(&self, input: &str, area: &str) -> Result<GeoPosition> {
         let responses = Self::get_mock_responses();
 
         Ok(responses.get(input).cloned().unwrap_or(GeoPosition {
@@ -56,12 +56,12 @@ mod tests {
         let geocoder = MockGeocoderProvider {};
 
         // Test known location
-        let ny_position = geocoder.geocode("New York").await.unwrap();
+        let ny_position = geocoder.geocode("New York", "New York").await.unwrap();
         assert_eq!(ny_position.latitude, 40.7128);
         assert_eq!(ny_position.longitude, -74.0060);
 
         // Test unknown location (should return default position)
-        let unknown_position = geocoder.geocode("Unknown Location").await.unwrap();
+        let unknown_position = geocoder.geocode("Unknown Location", "Unknown Location").await.unwrap();
         assert_eq!(unknown_position.latitude, 0.0);
         assert_eq!(unknown_position.longitude, 0.0);
     }
@@ -72,6 +72,7 @@ mod tests {
         let service = MockGeocoderProvider {};
         let request = GeocoderRequest {
             input: "London".to_string(),
+            area: "United Kingdom".to_string(),
             service,
         };
 

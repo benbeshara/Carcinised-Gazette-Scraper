@@ -28,10 +28,10 @@ struct AzureGeocoderResponse {
 
 #[async_trait::async_trait]
 impl GeocoderProvider for AzureGeocoderProvider {
-    async fn geocode(&self, input: &str) -> Result<GeoPosition> {
+    async fn geocode(&self, input: &str, area: &str) -> Result<GeoPosition> {
         if let Ok(api_key) = env::var("AZURE_API_KEY") {
             let client = Client::new();
-            let input = format!("{input}, VICTORIA, AUSTRALIA");
+            let input = format!("{input}, {area}, VICTORIA, AUSTRALIA");
             let request = format!("https://atlas.microsoft.com/search/address/json?&subscription-key={api_key}&api-version=1.0&language=en-AU&countrySet=AU&query={input}");
             let res = client.get(request).send().await?;
 

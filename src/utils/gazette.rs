@@ -87,6 +87,18 @@ where
         Err(anyhow!("No map found in {}", &self.gazette.uri))
     }
 
+    async fn get_operation_area(page_text: &str) -> Result<String> {
+        let area_regex = Regex::new(r"Planned Operation in (.*)")?;
+
+        for cap in area_regex.captures_iter(&page_text) {
+            if let Some(area_string) = cap.get(0) {
+                return Ok(area_string.as_str().to_string());
+            }
+        }
+
+        Err(anyhow!("Could not find operation area"))
+    }
+
     pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
         let page_text = &self.gazette.get_doc_text().await?;
         let loc = LocationParser {
@@ -94,10 +106,12 @@ where
             locations: page_text.to_owned(),
         };
         let places = loc.parse_locations().await?;
+        let area = &Self::get_operation_area(&page_text).await?.clone();
         let futures = places.into_iter().map(|place| async move {
             let gc = GeocoderRequest {
                 service: self.geocoder.clone(),
                 input: place,
+                area: area.into(),
             };
             gc.geocode().await.unwrap_or_default()
         });

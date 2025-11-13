@@ -3,7 +3,7 @@ use anyhow::Result;
 
 #[async_trait::async_trait]
 pub trait GeocoderProvider {
-    async fn geocode(&self, input: &str) -> Result<GeoPosition>;
+    async fn geocode(&self, input: &str, area: &str) -> Result<GeoPosition>;
 }
 
 #[derive(Clone, Debug)]
@@ -12,6 +12,7 @@ where
     T: GeocoderProvider,
 {
     pub input: String,
+    pub area: String,
     pub service: T,
 }
 
@@ -20,7 +21,7 @@ where
     T: GeocoderProvider,
 {
     pub async fn geocode(&self) -> Result<GeoPosition> {
-        self.service.geocode(&self.input).await
+        self.service.geocode(&self.input, &self.area).await
     }
 }
 
@@ -37,6 +38,7 @@ mod test {
         // Test with a known location
         let request = GeocoderRequest {
             input: "Tokyo".to_string(),
+            area: "Japan".to_string(),
             service: geocoder,
         };
 
