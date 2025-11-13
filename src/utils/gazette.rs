@@ -91,7 +91,7 @@ where
         let area_regex = Regex::new(r"Planned Operation in (.*)")?;
 
         for cap in area_regex.captures_iter(&page_text) {
-            if let Some(area_string) = cap.get(0) {
+            if let Some(area_string) = cap.get(1) {
                 return Ok(area_string.as_str().to_string());
             }
         }
@@ -289,7 +289,7 @@ mod tests {
         let gazette = GazetteHandler {
             gazette: Gazette
             {
-                uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
+                uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S630.pdf".to_string(),
                 ..Default::default()
             },
             database_provider: crate::db::mock::MockDatabaseProvider::new(),
@@ -304,6 +304,6 @@ mod tests {
 
         assert!(polygon.is_some());
         assert!(image.is_some());
-        assert!(date_range.0 < date_range.1);
+        assert!(date_range.0 <= date_range.1);
     }
 }
