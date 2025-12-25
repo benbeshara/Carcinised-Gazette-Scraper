@@ -193,6 +193,7 @@ impl Gazette {
         let declaration_start_index = all_text
             .find("This declaration will be in place")
             .or_else(|| all_text.find("This declaration will operate as follows"))
+            .or_else(|| all_text.find("The declared Designated Area will be operating"))
             .ok_or(anyhow!("Could not find date identifier"))?;
         let search_text = &all_text[declaration_start_index..].replace('\n', "");
         let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
@@ -202,9 +203,14 @@ impl Gazette {
                 ["This declaration will be in place".len()..declaration_end_index]
                 .trim()
                 .to_string()
-        } else {
+        } else if search_text.starts_with("This declaration will operate as follows") {
             search_text
                 ["This declaration will operate as follows".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        } else {
+            search_text
+                ["The declared Designated Area will be operating".len()..declaration_end_index]
                 .trim()
                 .to_string()
         };
