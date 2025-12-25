@@ -192,14 +192,22 @@ impl Gazette {
 
         let declaration_start_index = all_text
             .find("This declaration will be in place")
+            .or_else(|| all_text.find("This declaration will operate as follows"))
             .ok_or(anyhow!("Could not find date identifier"))?;
         let search_text = &all_text[declaration_start_index..].replace('\n', "");
         let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
 
-        let date_string = search_text
-            ["This declaration will be in place".len()..declaration_end_index]
-            .trim()
-            .to_string();
+        let date_string = if search_text.starts_with("This declaration will be in place") {
+            search_text
+                ["This declaration will be in place".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        } else {
+            search_text
+                ["This declaration will operate as follows".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        };
 
         let mut date_result = Gazette::parse_date_text(&date_string)?;
 
@@ -289,7 +297,7 @@ mod tests {
         let gazette = GazetteHandler {
             gazette: Gazette
             {
-                uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S630.pdf".to_string(),
+                uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S737.pdf".to_string(),
                 ..Default::default()
             },
             database_provider: crate::db::mock::MockDatabaseProvider::new(),
