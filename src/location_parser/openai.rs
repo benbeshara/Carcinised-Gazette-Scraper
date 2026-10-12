@@ -43,7 +43,7 @@ impl LocationParserService for OpenAI {
             .post("https://api.openai.com/v1/chat/completions")
             .bearer_auth(api_key)
             .json(&json!({
-            "model": "gpt-4",
+            "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "system",
