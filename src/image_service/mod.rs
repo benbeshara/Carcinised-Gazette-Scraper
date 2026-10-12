@@ -1,4 +1,4 @@
-mod core;
+pub(crate) mod core;
 mod s3;
 #[cfg(test)]
 pub(crate) mod mock;

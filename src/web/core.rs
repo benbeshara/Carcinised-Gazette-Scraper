@@ -1,5 +1,4 @@
 use crate::db::core::DatabaseProvider;
-use crate::db::redis::RedisProvider;
 use crate::db::DatabaseConnection;
 use crate::geocoder::core::GeocoderProvider;
 use crate::image_service::ImageService;
@@ -32,8 +31,8 @@ where
     W: GeocoderProvider + Clone + Copy + Send + Sync + 'static,
 {
     let app = Router::new()
-        .route("/", get(landing))
-        .route("/data", get(list_sse))
+        .route("/", get(landing::<T, U, V, W>))
+        .route("/data", get(list_sse::<T, U, V, W>))
         .with_state(config);
 
     let port: u16 = env::var("PORT")
@@ -79,8 +78,8 @@ where
 
         let _ = update_task.await;
 
-        let data_future = render_list();
-        let polygons_future = fetch_polygons();
+        let data_future = render_list(&state.database_provider);
+        let polygons_future = fetch_polygons(&state.database_provider);
         let (data, polygons) = tokio::join!(data_future, polygons_future);
 
         let _ = tx
@@ -99,15 +98,15 @@ where
     )
 }
 
-async fn initial_list() -> Markup {
+async fn initial_list<T: DatabaseProvider + Clone>(db_provider: &T) -> Markup {
     html! {
-        (PreEscaped(render_list().await))
+        (PreEscaped(render_list(db_provider).await))
     }
 }
 
-async fn fetch_polygons() -> String {
+async fn fetch_polygons<T: DatabaseProvider + Clone>(db_provider: &T) -> String {
     let db = DatabaseConnection {
-        provider: RedisProvider,
+        provider: db_provider.clone(),
     };
     let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
@@ -183,9 +182,9 @@ async fn fetch_polygons() -> String {
     "[]".to_string()
 }
 
-async fn render_list() -> String {
+async fn render_list<T: DatabaseProvider + Clone>(db_provider: &T) -> String {
     let db = DatabaseConnection {
-        provider: RedisProvider,
+        provider: db_provider.clone(),
     };
     let base_uri = env::var("OBJECT_STORAGE_URL").unwrap_or_default();
     if let Ok(gazettes) = db.fetch_entries().await {
@@ -234,9 +233,17 @@ async fn render_list() -> String {
     "Failed to fetch data".to_string()
 }
 
-async fn landing() -> Markup {
-    let initial_polygons = fetch_polygons().await;
-    let initial_list_content = initial_list().await;
+async fn landing<T, U, V, W>(
+    State(state): State<ServiceConfig<T, U, V, W>>,
+) -> Markup
+where
+    T: DatabaseProvider + Clone + Send + Sync + 'static,
+    U: ImageService + Clone + Copy + Send + Sync + 'static,
+    V: LocationParserService + Clone + Copy + Send + Sync + 'static,
+    W: GeocoderProvider + Clone + Copy + Send + Sync + 'static,
+{
+    let initial_polygons = fetch_polygons(&state.database_provider).await;
+    let initial_list_content = initial_list(&state.database_provider).await;
     let carto_api_key = env::var("CARTO_API_KEY").unwrap_or_default();
 
     base_template(&html! {

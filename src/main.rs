@@ -15,8 +15,12 @@ use crate::web::start_server;
 
 #[tokio::main]
 async fn main() {
+    let redis_provider = RedisProvider::new()
+        .await
+        .expect("Failed to initialize Redis connection");
+
     let config = ServiceConfig {
-        database_provider: RedisProvider,
+        database_provider: redis_provider,
         image_service: S3,
         location_parser: OpenAI,
         geocoder: GoogleGeocoderProvider,

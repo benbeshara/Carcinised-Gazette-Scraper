@@ -1,100 +1,111 @@
 use crate::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};
-use redis::{Connection, TypedCommands};
+use futures::StreamExt;
+use redis::aio::MultiplexedConnection;
+use redis::AsyncCommands;
 use serde::Serialize;
 
-#[derive(Clone, Default, Serialize)]
-pub struct RedisProvider;
+#[derive(Clone)]
+pub struct RedisProvider {
+    connection: MultiplexedConnection,
+}
 
 impl RedisProvider {
     const FLAGGED_PREFIX: &'static str = "flagged:";
     const DISCARDED_PREFIX: &'static str = "discarded:";
 
-    pub fn check_key_exists(
-        connection: &mut Connection,
+    pub async fn new() -> Result<Self> {
+        let connection = Self::connect().await?;
+        Ok(Self { connection })
+    }
+
+    async fn check_key_exists(
+        connection: &mut MultiplexedConnection,
         prefix: &str,
         id: &str,
     ) -> Result<bool> {
         connection
-            .exists::<String>(format!("{prefix}{id}"))
-            .map_err(|e| anyhow!("Failed to check Redis key: {}", e))
+            .exists::<String, bool>(format!("{prefix}{id}"))
+            .await
+            .map_err(|e| anyhow!("Failed to check Redis key: {e}"))
     }
 }
 
 #[async_trait::async_trait]
 impl DatabaseProvider for RedisProvider {
-    type DBResult = Connection;
+    type DBResult = MultiplexedConnection;
 
     async fn connect() -> Result<Self::DBResult> {
         let redis_url: String = std::env::var("REDIS_URL")
             .unwrap_or_else(|_| "redis://localhost:6379".to_string())
             .parse()
             .expect("Failed to get REDIS_URL");
-        let redis_url_insecure = redis_url + "#insecure";
-        let redis = redis::Client::open(redis_url_insecure)?;
-        let redis_client = redis.get_connection()?;
 
-        Ok(redis_client)
+        let insecure = std::env::var("REDIS_INSECURE_TLS")
+            .map(|v| v == "true" || v == "1")
+            .unwrap_or(false);
+
+        let final_url = if insecure {
+            format!("{redis_url}#insecure")
+        } else {
+            redis_url
+        };
+
+        let client = redis::Client::open(final_url)?;
+        let connection = client.get_multiplexed_async_connection().await?;
+        Ok(connection)
     }
 
     async fn has_entry(&self, id: &str) -> Result<bool> {
-        let mut connection = Self::connect()
-            .await
-            .map_err(|e| anyhow!("Failed to connect to Redis: {}", e))?;
+        let mut conn = self.connection.clone();
 
         let flagged_exists =
-            Self::check_key_exists(&mut connection, Self::FLAGGED_PREFIX, id)?;
+            Self::check_key_exists(&mut conn, Self::FLAGGED_PREFIX, id).await?;
         let discarded_exists =
-            Self::check_key_exists(&mut connection, Self::DISCARDED_PREFIX, id)?;
+            Self::check_key_exists(&mut conn, Self::DISCARDED_PREFIX, id).await?;
 
-        let exists = flagged_exists || discarded_exists;
-
-        println!(
-            "{}",
-            if exists {
-                format!("Found entry {id}")
-            } else {
-                format!("Could not find entry {id}")
-            }
-        );
-
-        Ok(exists)
+        Ok(flagged_exists || discarded_exists)
     }
 
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool> {
-        if let Ok(mut connection) = Self::connect().await {
-            connection.set(id, value)?;
-            return Ok(true);
-        }
-        Err(anyhow!("Could not create entry"))
+        let mut conn = self.connection.clone();
+        conn.set::<&str, &Gazette, ()>(id, value).await?;
+        Ok(true)
     }
 
     async fn fetch_entries(&self) -> Result<Vec<Gazette>> {
-        // We don't want to use the typed commands here because we're deserialising them directly into
-        // gazettes; hence this section looks a little funky
-        use redis::Commands;
+        let mut conn = self.connection.clone();
+        let mut cursor: u64 = 0;
+        let mut keys: Vec<String> = Vec::new();
 
-        if let Ok(mut connection) = Self::connect().await {
-            let mut gazettes: Vec<Gazette> = vec![];
-            if let Ok(keys) = Commands::keys::<&str, Vec<String>>(&mut connection, "flagged:*") {
-                let _ = keys
-                    .into_iter()
-                    .map(|key| {
-                        if let Ok(gazette) =
-                            Commands::get::<&String, Gazette>(&mut connection, &key)
-                        {
-                            gazettes.push(gazette);
-                        }
-                    })
-                    .collect::<Vec<_>>();
+        // Paginate through keys using non-blocking SCAN with an explicit cursor
+        loop {
+            let (next_cursor, batch): (u64, Vec<String>) = redis::cmd("SCAN")
+                .arg(cursor)
+                .arg("MATCH")
+                .arg("flagged:*")
+                .arg("COUNT")
+                .arg(100)
+                .query_async(&mut conn)
+                .await
+                .map_err(|e| anyhow!("Failed to SCAN keys: {e}"))?;
+
+            keys.extend(batch);
+            cursor = next_cursor;
+            if cursor == 0 {
+                break;
             }
-
-            gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));
-
-            return Ok(gazettes);
         }
 
-        Err(anyhow!("Could not fetch entries"))
+        let mut gazettes: Vec<Gazette> = Vec::new();
+        for key in keys {
+            if let Ok(gazette) = conn.get::<&str, Gazette>(&key).await {
+                gazettes.push(gazette);
+            }
+        }
+
+        gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));
+        Ok(gazettes)
     }
 }

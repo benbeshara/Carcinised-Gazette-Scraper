@@ -58,8 +58,8 @@ where
                 };
 
                 match db.has_entry(&hash).await {
-                    Ok(false) => match self.filter_result(&result).await {
-                        Ok(is_flagged) => Some((result, is_flagged)),
+                    Ok(false) => match self.fetch_and_filter(&result).await {
+                        Ok((is_flagged, doc_opt)) => Some((result, is_flagged, doc_opt)),
                         Err(_) => None,
                     },
                     _ => None,
@@ -72,9 +72,9 @@ where
         let (flagged, discarded): (Vec<_>, Vec<_>) = filtered_results
             .into_iter()
             .flatten()
-            .partition(|(_result, is_flagged)| *is_flagged);
+            .partition(|(_result, is_flagged, _)| *is_flagged);
 
-        let flagged_futures = flagged.into_iter().map(|((title, uri), _)| async move {
+        let flagged_futures = flagged.into_iter().map(|((title, uri), _, doc)| async move {
             let mut gazette_handler = GazetteHandler {
                 gazette: Gazette {
                     uri: uri.clone(),
@@ -86,6 +86,7 @@ where
                 image_service: self.config.image_service,
                 location_parser: self.config.location_parser.clone(),
                 geocoder: self.config.geocoder.clone(),
+                loaded_doc: doc,
             };
 
             if let Ok(img) = gazette_handler.try_upload_image().await {
@@ -105,7 +106,7 @@ where
             uri
         });
 
-        let discarded_futures = discarded.into_iter().map(|((title, uri), _)| async move {
+        let discarded_futures = discarded.into_iter().map(|((title, uri), _, _)| async move {
             let gazette_handler = GazetteHandler {
                 gazette: Gazette {
                     uri: uri.clone(),
@@ -116,6 +117,7 @@ where
                 image_service: self.config.image_service,
                 location_parser: self.config.location_parser.clone(),
                 geocoder: self.config.geocoder.clone(),
+                loaded_doc: None,
             };
 
             let _ = gazette_handler.save().await;
@@ -152,13 +154,20 @@ where
         Ok(pdf_list)
     }
 
-    async fn filter_result(&self, chunk: &(String, String)) -> Result<bool> {
+    async fn fetch_and_filter(
+        &self,
+        chunk: &(String, String),
+    ) -> Result<(bool, Option<lopdf::Document>)> {
         let (_, uri) = chunk;
-
         let pdf_bytes = reqwest::get(uri).await?.bytes().await?;
         let pdf = lopdf::Document::load_mem(&pdf_bytes)?;
         let page_text = pdf.extract_text(&[FIRST_PAGE])?;
+        let is_target = page_text.contains(TARGET_TEXT);
 
-        Ok(page_text.contains(TARGET_TEXT))
+        if is_target {
+            Ok((true, Some(pdf)))
+        } else {
+            Ok((false, None))
+        }
     }
 }

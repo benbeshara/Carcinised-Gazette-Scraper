@@ -4,7 +4,9 @@ use anyhow::Result;
 #[async_trait::async_trait]
 pub trait DatabaseProvider {
     type DBResult;
-    async fn connect() -> Result<Self::DBResult>;
+    async fn connect() -> Result<Self::DBResult>
+    where
+        Self: Sized;
     async fn has_entry(&self, id: &str) -> Result<bool>;
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool>;
     async fn fetch_entries(&self) -> Result<Vec<Gazette>>;

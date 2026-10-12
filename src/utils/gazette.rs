@@ -39,6 +39,7 @@ where
     pub image_service: U,
     pub location_parser: V,
     pub geocoder: W,
+    pub loaded_doc: Option<Document>,
 }
 
 pub fn make_hash(key: &str) -> String {
@@ -72,19 +73,28 @@ where
         Ok(true)
     }
 
-    pub(crate) async fn try_upload_image(&self) -> Result<Option<String>> {
+    pub(crate) async fn try_upload_image(&mut self) -> Result<Option<String>> {
         let hash = make_hash(&self.gazette.uri);
 
-        if let Ok(map) = &self.gazette.extract_map().await {
+        let doc = self.get_or_load_doc().await?;
+        if let Ok(map) = Self::extract_map_from_doc(doc) {
             let image = Image {
                 filename: format!("./{hash}.jpg"),
-                data: map.clone(),
+                data: map,
                 service: self.image_service,
             };
 
             return image.upload().await;
         }
         Err(anyhow!("No map found in {}", &self.gazette.uri))
+    }
+
+    async fn get_or_load_doc(&mut self) -> Result<&Document> {
+        if self.loaded_doc.is_none() {
+            let doc = self.gazette.get_pdf().await?;
+            self.loaded_doc = Some(doc);
+        }
+        Ok(self.loaded_doc.as_ref().unwrap())
     }
 
     async fn get_operation_area(page_text: &str) -> Result<String> {
@@ -99,29 +109,61 @@ where
         Err(anyhow!("Could not find operation area"))
     }
 
-    pub(crate) async fn get_polygon(&self) -> Result<Option<MapPolygon>> {
-        let page_text = &self.gazette.get_doc_text().await?;
+    pub(crate) async fn get_polygon(&mut self) -> Result<Option<MapPolygon>> {
+        let doc = self.get_or_load_doc().await?;
+        let page_text = Self::extract_doc_text(doc)?;
         let loc = LocationParser {
             provider: self.location_parser.clone(),
-            locations: page_text.to_owned(),
+            locations: page_text.clone(),
         };
         let places = loc.parse_locations().await?;
-        let area = &Self::get_operation_area(&page_text).await?.clone();
-        let futures = places.into_iter().map(|place| async move {
-            let gc = GeocoderRequest {
-                service: self.geocoder.clone(),
-                input: place,
-                area: area.into(),
-            };
-            gc.geocode().await.unwrap_or_default()
+        let area = Self::get_operation_area(&page_text).await?;
+        let futures = places.into_iter().map(|place| {
+            let area = area.clone();
+            let geocoder = self.geocoder.clone();
+            async move {
+                let gc = GeocoderRequest {
+                    service: geocoder,
+                    input: place,
+                    area,
+                };
+                gc.geocode().await.unwrap_or_default()
+            }
         });
         let mut polygon = futures::future::join_all(futures).await;
         polygon.sanitise();
         Ok(Some(MapPolygon { data: polygon }))
     }
 
-    pub(crate) async fn get_date(&self) -> Result<(NaiveDate, NaiveDate)> {
-        self.gazette.get_date().await
+    pub(crate) async fn get_date(&mut self) -> Result<(NaiveDate, NaiveDate)> {
+        let uri = self.gazette.uri.clone();
+        let doc = self.get_or_load_doc().await?;
+        Gazette::extract_date_from_doc(doc, &uri)
+    }
+
+    fn extract_map_from_doc(pdf: &Document) -> Result<Vec<u8>> {
+        let mut images: Vec<lopdf::xobject::PdfImage> = Vec::new();
+
+        for page in pdf.get_pages() {
+            if let Ok(page_images) = &mut pdf.get_page_images(page.1) {
+                images.append(page_images);
+            }
+        }
+
+        if let Some(map) = images.first() {
+            return Ok(Vec::from(map.content.clone()));
+        }
+
+        Err(anyhow!("No map found in document"))
+    }
+
+    fn extract_doc_text(pdf: &Document) -> Result<String> {
+        let mut doc_text = String::new();
+        for page in pdf.get_pages() {
+            let page_text = pdf.extract_text(&[page.0])?;
+            doc_text.push_str(&page_text);
+        }
+        Ok(doc_text)
     }
 }
 
@@ -130,6 +172,57 @@ impl Gazette {
         let req = reqwest::get(&self.uri).await?;
         let bytes = req.bytes().await?;
         Document::load_mem(&bytes).map_err(Into::into)
+    }
+
+    pub(crate) fn extract_date_from_doc(
+        pdf: &Document,
+        uri: &str,
+    ) -> Result<(NaiveDate, NaiveDate)> {
+        let mut all_text = String::new();
+        for page in pdf.get_pages() {
+            if let Ok(page_text) = pdf.extract_text(&[page.0]) {
+                all_text.push_str(&page_text);
+            }
+        }
+
+        let declaration_start_index = all_text
+            .find("This declaration will be in place")
+            .or_else(|| all_text.find("This declaration will operate as follows"))
+            .or_else(|| all_text.find("The declared Designated Area will be operating"))
+            .ok_or_else(|| anyhow!("Could not find date identifier"))?;
+        let search_text = &all_text[declaration_start_index..].replace('\n', "");
+        let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
+
+        let date_string = if search_text.starts_with("This declaration will be in place") {
+            search_text
+                ["This declaration will be in place".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        } else if search_text.starts_with("This declaration will operate as follows") {
+            search_text
+                ["This declaration will operate as follows".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        } else {
+            search_text
+                ["The declared Designated Area will be operating".len()..declaration_end_index]
+                .trim()
+                .to_string()
+        };
+
+        let mut date_result = Gazette::parse_date_text(&date_string)?;
+
+        if date_result.is_empty() {
+            return Err(anyhow!("No dates found in {uri}"));
+        }
+        date_result.sort();
+        let start = date_result[0];
+        let mut end = start;
+        if date_result.len() > 1 {
+            end = date_result[1];
+        }
+
+        Ok((start, end))
     }
 
     pub(crate) async fn extract_map(&self) -> Result<Vec<u8>> {
@@ -300,7 +393,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_gazette_extraction() {
-        let gazette = GazetteHandler {
+        let mut gazette = GazetteHandler {
             gazette: Gazette
             {
                 uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S737.pdf".to_string(),
@@ -310,6 +403,7 @@ mod tests {
             image_service: crate::image_service::mock::MockImageService::new(true),
             location_parser: crate::location_parser::mock::MockLocationParser::new(),
             geocoder: crate::geocoder::mock::MockGeocoderProvider { },
+            loaded_doc: None,
         };
 
         let polygon = gazette.get_polygon().await.unwrap();
