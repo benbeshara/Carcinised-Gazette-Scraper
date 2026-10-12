@@ -38,15 +38,15 @@ impl DatabaseProvider for RedisProvider {
 
     async fn connect() -> Result<Self::DBResult> {
         let redis_url: String = std::env::var("REDIS_URL")
-            .unwrap_or_else(|_| "redis://localhost:6379".to_string())
-            .parse()
-            .expect("Failed to get REDIS_URL");
+            .unwrap_or_else(|_| "redis://localhost:6379".to_string());
 
-        let insecure = std::env::var("REDIS_INSECURE_TLS")
+        // Heroku Redis uses 'rediss://' (TLS) with self-signed certificates
+        let is_tls = redis_url.starts_with("rediss://");
+        let insecure = is_tls || std::env::var("REDIS_INSECURE_TLS")
             .map(|v| v == "true" || v == "1")
             .unwrap_or(false);
 
-        let final_url = if insecure {
+        let final_url = if insecure && !redis_url.contains("#insecure") {
             format!("{redis_url}#insecure")
         } else {
             redis_url

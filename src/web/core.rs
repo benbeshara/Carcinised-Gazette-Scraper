@@ -40,10 +40,12 @@ where
         .parse() // Parse the port string into a u16
         .expect("Failed to parse PORT");
 
-    let address = SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], port));
+    let address = SocketAddr::from(([0, 0, 0, 0], port));
 
-    let listener = tokio::net::TcpListener::bind(&address).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(&address).await
+        .expect("Failed to bind TCP listener to PORT");
+    axum::serve(listener, app).await
+        .expect("Failed to run Axum HTTP server");
 }
 
 async fn list_sse<T, U, V, W>(

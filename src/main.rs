@@ -15,9 +15,13 @@ use crate::web::start_server;
 
 #[tokio::main]
 async fn main() {
-    let redis_provider = RedisProvider::new()
-        .await
-        .expect("Failed to initialize Redis connection");
+    let redis_provider = match RedisProvider::new().await {
+        Ok(provider) => provider,
+        Err(err) => {
+            eprintln!("CRITICAL: Failed to connect to Redis: {err:?}");
+            std::process::exit(1);
+        }
+    };
 
     let config = ServiceConfig {
         database_provider: redis_provider,
