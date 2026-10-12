@@ -262,21 +262,29 @@ impl Gazette {
             "will operate as follows",
         ];
 
-        let declaration_start_index = start_markers
+        // Find the earliest matching marker and advance the index past the marker
+        let (marker_idx, marker_len) = start_markers
             .iter()
-            .filter_map(|&marker| all_text.find(marker).map(|idx| idx + marker.len()))
-            .next()
+            .filter_map(|&marker| all_text.find(marker).map(|idx| (idx, marker.len())))
+            .min_by_key(|&(idx, _)| idx)
             .ok_or_else(|| anyhow!("Could not find date identifier in {uri}"))?;
 
-        let search_text = all_text[declaration_start_index..].replace('\n', " ");
+        let search_text = all_text[marker_idx + marker_len..].replace('\n', " ");
 
-        // Look for common ending section markers or take a window of the text
-        let stop_markers = ["SCHEDULE", "It is an offence", "Victoria Government Gazette", "Dated"];
+        // Stop before subsequent sections or trailing page headers / signature dates
+        let stop_markers = [
+            "SCHEDULE",
+            "It is an offence",
+            "Victoria Government Gazette",
+            "Dated ",
+            "This page was left blank",
+        ];
+
         let declaration_end_index = stop_markers
             .iter()
             .filter_map(|&marker| search_text.find(marker))
             .min()
-            .unwrap_or_else(|| search_text.len().min(1000));
+            .unwrap_or_else(|| search_text.len().min(800));
 
         let date_string = &search_text[..declaration_end_index];
         let mut date_result = Gazette::parse_date_text(date_string)?;
