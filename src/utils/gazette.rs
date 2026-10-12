@@ -99,9 +99,10 @@ where
 
     async fn get_operation_area(page_text: &str) -> Result<String> {
         let area_patterns = [
-            r"Planned Operation (?:in|at)\s+([^\n\r\.]+)",
-            r"Designated Area\s+under\s+section\s+10D(?:\(1\))?\s*–?\s*([^\n\r\.]+)",
-            r"public places within\s+([^,]+,\s*[^,\n]+)",
+            r"Planned Operation\s*[-–:]?\s*(?:in|at)?\s*([^\n\r\.]+)",
+            r"Designated Area\s+under\s+section\s+10D[^\n\r]*[-–:]\s*([^\n\r\.]+)",
+            r"public places within(?:\s+and\s+around)?\s+([^,\n\r]+(?:,\s*[^,\n\r]+)?)",
+            r"all public places within\s+([^\n\r\.]+)",
         ];
 
         for pattern in &area_patterns {
@@ -125,7 +126,8 @@ where
             }
         }
 
-        Err(anyhow!("Could not find operation area"))
+        // Fallback: return empty string rather than failing completely so geocoding can still proceed
+        Ok(String::new())
     }
 
     pub(crate) async fn get_polygon(&mut self) -> Result<Option<MapPolygon>> {
@@ -136,7 +138,7 @@ where
             locations: page_text.clone(),
         };
         let places = loc.parse_locations().await?;
-        let area = Self::get_operation_area(&page_text).await?;
+        let area = Self::get_operation_area(&page_text).await.unwrap_or_default();
         let futures = places.into_iter().map(|place| {
             let area = area.clone();
             let geocoder = self.geocoder.clone();
@@ -153,8 +155,10 @@ where
         polygon.sanitise();
 
         let mut map_polygon = MapPolygon { data: polygon };
-        // Remove points that accidentally resolved far outside the local cluster
-        map_polygon.remove_isolated_points(15.0, 2);
+        // Only prune isolated outliers if we have enough points to afford filtering
+        if map_polygon.data.len() > 4 {
+            map_polygon.remove_isolated_points(25.0, 1);
+        }
         map_polygon.remove_identical_points();
 
         if map_polygon.data.is_empty() {
