@@ -237,6 +237,7 @@ async fn render_list() -> String {
 async fn landing() -> Markup {
     let initial_polygons = fetch_polygons().await;
     let initial_list_content = initial_list().await;
+    let carto_api_key = env::var("CARTO_API_KEY").unwrap_or_default();
 
     base_template(&html! {
         div.center {
@@ -248,13 +249,14 @@ async fn landing() -> Markup {
             (footer_section())
         }
         (get_styles())
-        (map_javascript(&initial_polygons))
+        (map_javascript(&initial_polygons, &carto_api_key))
     })
 }
 
-fn map_javascript(initial_polygons: &str) -> Markup {
+fn map_javascript(initial_polygons: &str, carto_api_key: &str) -> Markup {
     html! {
         script {
+            (PreEscaped(format!("const cartoApiKey = \"{}\";", carto_api_key)))
             (PreEscaped(include_str!("js/map-init.js")))
             (PreEscaped(include_str!("js/update-functions.js")))
             (PreEscaped(format!(
