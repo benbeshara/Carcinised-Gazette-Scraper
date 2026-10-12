@@ -248,45 +248,47 @@ impl Gazette {
         for page in pdf.get_pages() {
             if let Ok(page_text) = pdf.extract_text(&[page.0]) {
                 all_text.push_str(&page_text);
+                all_text.push(' ');
             }
         }
 
+        let lower = all_text.to_lowercase();
         let start_markers = [
-            "This declaration will be in place",
-            "This declaration will operate as follows",
-            "The declared Designated Area will be operating",
-            "The declared designated area will be operating",
-            "The declared designated area will be in effect",
-            "The declared Designated Area will be in effect",
-            "will be in effect from",
+            "will be in place",
             "will operate as follows",
+            "will be operating",
+            "will be in effect",
+            "will operate from",
         ];
 
-        // Find the earliest matching marker and advance the index past the marker
-        let (marker_idx, marker_len) = start_markers
+        let marker_pos = start_markers
             .iter()
-            .filter_map(|&marker| all_text.find(marker).map(|idx| (idx, marker.len())))
-            .min_by_key(|&(idx, _)| idx)
+            .filter_map(|&marker| {
+                lower.find(marker).map(|idx| idx + marker.len())
+            })
+            .min()
             .ok_or_else(|| anyhow!("Could not find date identifier in {uri}"))?;
 
-        let search_text = all_text[marker_idx + marker_len..].replace('\n', " ");
+        let search_text = all_text[marker_pos..].replace('\n', " ");
 
-        // Stop before subsequent sections or trailing page headers / signature dates
+        // Boundary markers that signal the end of the date/schedule section
         let stop_markers = [
             "SCHEDULE",
+            "Schedule",
+            "Designated Area",
+            "Victoria Police powers",
             "It is an offence",
-            "Victoria Government Gazette",
             "Dated ",
             "This page was left blank",
         ];
 
-        let declaration_end_index = stop_markers
+        let end_idx = stop_markers
             .iter()
             .filter_map(|&marker| search_text.find(marker))
             .min()
-            .unwrap_or_else(|| search_text.len().min(800));
+            .unwrap_or_else(|| search_text.len().min(1200));
 
-        let date_string = &search_text[..declaration_end_index];
+        let date_string = &search_text[..end_idx];
         let mut date_result = Gazette::parse_date_text(date_string)?;
 
         if date_result.is_empty() {
