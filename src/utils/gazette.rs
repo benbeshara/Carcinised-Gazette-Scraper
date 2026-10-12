@@ -98,11 +98,30 @@ where
     }
 
     async fn get_operation_area(page_text: &str) -> Result<String> {
-        let area_regex = Regex::new(r"Planned Operation in (.*)")?;
+        let area_patterns = [
+            r"Planned Operation (?:in|at)\s+([^\n\r\.]+)",
+            r"Designated Area\s+under\s+section\s+10D(?:\(1\))?\s*–?\s*([^\n\r\.]+)",
+            r"public places within\s+([^,]+,\s*[^,\n]+)",
+        ];
 
-        for cap in area_regex.captures_iter(&page_text) {
-            if let Some(area_string) = cap.get(1) {
-                return Ok(area_string.as_str().to_string());
+        for pattern in &area_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                if let Some(cap) = re.captures(page_text) {
+                    if let Some(matched) = cap.get(1) {
+                        let cleaned = matched.as_str().trim().trim_end_matches('.').to_string();
+                        if !cleaned.is_empty() {
+                            return Ok(cleaned);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Fallback: search for LGA or "City of ..." or "Shire of ..."
+        let lga_regex = Regex::new(r"(City of [A-Za-z\s]+|Shire of [A-Za-z\s]+)")?;
+        if let Some(cap) = lga_regex.captures(page_text) {
+            if let Some(matched) = cap.get(1) {
+                return Ok(matched.as_str().trim().to_string());
             }
         }
 
@@ -132,7 +151,17 @@ where
         });
         let mut polygon = futures::future::join_all(futures).await;
         polygon.sanitise();
-        Ok(Some(MapPolygon { data: polygon }))
+
+        let mut map_polygon = MapPolygon { data: polygon };
+        // Remove points that accidentally resolved far outside the local cluster
+        map_polygon.remove_isolated_points(15.0, 2);
+        map_polygon.remove_identical_points();
+
+        if map_polygon.data.is_empty() {
+            return Ok(None);
+        }
+
+        Ok(Some(map_polygon))
     }
 
     pub(crate) async fn get_date(&mut self) -> Result<(NaiveDate, NaiveDate)> {
@@ -165,6 +194,43 @@ where
         }
         Ok(doc_text)
     }
+
+    pub async fn get_target_amended_gazette_uri(&mut self) -> Result<Option<String>> {
+        let doc = self.get_or_load_doc().await?;
+        let text = Self::extract_doc_text(doc)?;
+
+        let is_corrigendum = text.contains("CORRIGENDUM")
+            || text.contains("amends the notice")
+            || text.contains("amended to")
+            || text.contains("is amended");
+
+        if !is_corrigendum {
+            return Ok(None);
+        }
+
+        // Match patterns like: "Victoria Government Gazette No. S 82", "Gazette No. S82", or "No. S 82"
+        let re = Regex::new(r"(?:Victoria Government Gazette No\.\s*|Gazette No\.\s*|No\.\s*)S\s*(\d+)")?;
+        if let Some(cap) = re.captures(&text) {
+            if let Some(num_match) = cap.get(1) {
+                let notice_num: u32 = num_match.as_str().parse()?;
+                // Infer the year from the current notice URI (e.g. Gazettes2026) or default to current year
+                let year_re = Regex::new(r"Gazettes(\d{4})")?;
+                let year = year_re
+                    .captures(&self.gazette.uri)
+                    .and_then(|c| c.get(1))
+                    .and_then(|y| y.as_str().parse::<i32>().ok())
+                    .unwrap_or_else(|| Local::now().year());
+
+                let target_uri = format!(
+                    "http://www.gazette.vic.gov.au/gazette/Gazettes{}/GG{}S{:03}.pdf",
+                    year, year, notice_num
+                );
+                return Ok(Some(target_uri));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 impl Gazette {
@@ -185,42 +251,42 @@ impl Gazette {
             }
         }
 
-        let declaration_start_index = all_text
-            .find("This declaration will be in place")
-            .or_else(|| all_text.find("This declaration will operate as follows"))
-            .or_else(|| all_text.find("The declared Designated Area will be operating"))
-            .ok_or_else(|| anyhow!("Could not find date identifier"))?;
-        let search_text = &all_text[declaration_start_index..].replace('\n', "");
-        let declaration_end_index = search_text.find(". ").unwrap_or(search_text.len());
+        let start_markers = [
+            "This declaration will be in place",
+            "This declaration will operate as follows",
+            "The declared Designated Area will be operating",
+            "The declared designated area will be operating",
+            "The declared designated area will be in effect",
+            "The declared Designated Area will be in effect",
+            "will be in effect from",
+            "will operate as follows",
+        ];
 
-        let date_string = if search_text.starts_with("This declaration will be in place") {
-            search_text
-                ["This declaration will be in place".len()..declaration_end_index]
-                .trim()
-                .to_string()
-        } else if search_text.starts_with("This declaration will operate as follows") {
-            search_text
-                ["This declaration will operate as follows".len()..declaration_end_index]
-                .trim()
-                .to_string()
-        } else {
-            search_text
-                ["The declared Designated Area will be operating".len()..declaration_end_index]
-                .trim()
-                .to_string()
-        };
+        let declaration_start_index = start_markers
+            .iter()
+            .filter_map(|&marker| all_text.find(marker).map(|idx| idx + marker.len()))
+            .next()
+            .ok_or_else(|| anyhow!("Could not find date identifier in {uri}"))?;
 
-        let mut date_result = Gazette::parse_date_text(&date_string)?;
+        let search_text = all_text[declaration_start_index..].replace('\n', " ");
+
+        // Look for common ending section markers or take a window of the text
+        let stop_markers = ["SCHEDULE", "It is an offence", "Victoria Government Gazette", "Dated"];
+        let declaration_end_index = stop_markers
+            .iter()
+            .filter_map(|&marker| search_text.find(marker))
+            .min()
+            .unwrap_or_else(|| search_text.len().min(1000));
+
+        let date_string = &search_text[..declaration_end_index];
+        let mut date_result = Gazette::parse_date_text(date_string)?;
 
         if date_result.is_empty() {
             return Err(anyhow!("No dates found in {uri}"));
         }
         date_result.sort();
         let start = date_result[0];
-        let mut end = start;
-        if date_result.len() > 1 {
-            end = date_result[1];
-        }
+        let end = *date_result.last().unwrap_or(&start);
 
         Ok((start, end))
     }
@@ -232,10 +298,16 @@ impl Gazette {
 
         for cap in date_regex.captures_iter(date_string) {
             if let Some(date_str) = cap.get(0) {
-                if let Ok(parsed_date) = NaiveDate::parse_from_str(date_str.as_str(), "%e %B %Y").or_else(|_| {
-                    let with_year = format!("{} {}", date_str.as_str(), current_year);
-                    NaiveDate::parse_from_str(with_year.as_str(), "%e %B %Y")
-                }) {
+                let s = date_str.as_str();
+                let parse_attempt = NaiveDate::parse_from_str(s, "%e %B %Y")
+                    .or_else(|_| NaiveDate::parse_from_str(s, "%d %B %Y"))
+                    .or_else(|_| {
+                        let with_year = format!("{} {}", s, current_year);
+                        NaiveDate::parse_from_str(&with_year, "%e %B %Y")
+                            .or_else(|_| NaiveDate::parse_from_str(&with_year, "%d %B %Y"))
+                    });
+
+                if let Ok(parsed_date) = parse_attempt {
                     date_result.push(parsed_date);
                 }
             }
@@ -248,17 +320,6 @@ impl Gazette {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // #[tokio::test]
-    // async fn test_parse_date() {
-    //     let gazette = Gazette {
-    //         uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S467.pdf".to_string(),
-    //         ..Default::default()
-    //     };
-    //
-    //     let date_range = gazette.get_date().await.unwrap();
-    //     assert!(date_range.0 < date_range.1);
-    // }
 
     #[test]
     fn test_date_regex() {
@@ -315,15 +376,14 @@ mod tests {
     #[tokio::test]
     async fn test_gazette_extraction() {
         let mut gazette = GazetteHandler {
-            gazette: Gazette
-            {
+            gazette: Gazette {
                 uri: "http://www.gazette.vic.gov.au/gazette/Gazettes2025/GG2025S737.pdf".to_string(),
                 ..Default::default()
             },
             database_provider: crate::db::mock::MockDatabaseProvider::new(),
             image_service: crate::image_service::mock::MockImageService::new(true),
             location_parser: crate::location_parser::mock::MockLocationParser::new(),
-            geocoder: crate::geocoder::mock::MockGeocoderProvider { },
+            geocoder: crate::geocoder::mock::MockGeocoderProvider {},
             loaded_doc: None,
         };
 

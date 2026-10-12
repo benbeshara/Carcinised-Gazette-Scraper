@@ -117,4 +117,19 @@ impl DatabaseProvider for RedisProvider {
         gazettes.sort_by(|a, b| b.uri.cmp(&a.uri));
         Ok(gazettes)
     }
+
+    async fn fetch_entry(&self, id: &str) -> Result<Option<Gazette>> {
+        let mut conn = self.connection.clone();
+        let key = if id.starts_with(Self::FLAGGED_PREFIX) || id.starts_with(Self::DISCARDED_PREFIX) {
+            id.to_string()
+        } else {
+            format!("{}{}", Self::FLAGGED_PREFIX, id)
+        };
+
+        if let Ok(gazette) = conn.get::<&str, Gazette>(&key).await {
+            Ok(Some(gazette))
+        } else {
+            Ok(None)
+        }
+    }
 }

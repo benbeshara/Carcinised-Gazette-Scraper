@@ -40,6 +40,11 @@ impl DatabaseProvider for MockDatabaseProvider {
         let storage = self.storage.read().await;
         Ok(storage.values().cloned().collect())
     }
+
+    async fn fetch_entry(&self, id: &str) -> Result<Option<Gazette>> {
+        let storage = self.storage.read().await;
+        Ok(storage.get(id).cloned())
+    }
 }
 
 #[cfg(test)]

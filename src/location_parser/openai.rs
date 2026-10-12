@@ -46,24 +46,16 @@ impl LocationParserService for OpenAI {
             "model": "gpt-4",
             "messages": [
                 {
-                        "role": "system",
-                        "content": "You are a location extraction service. Extract locations from the input text following these rules:\n\
-                        1. Return only a list of locations, one per line\n\
-                        2. All locations should try to be an intersection\n\
-                        3. For intersections: Format as 'Corner of X and Y Streets'\n\
-                        4. For railways: Convert 'X Rail' to 'X Railway Station'\n\
-                        5. For shopping areas: Include 'Shopping Centre' in full\n\
-                        6. For CBDs: Keep format 'X CBD'\n\
-                        7. Ignore content in parentheses\n\
-                        8. For bridges and rivers, prefer the bridge name\n\
-                        9. Remove any duplicate locations\n\
-                        10. Maintain the order of locations as they appear in the text\n\
-                        11. Include full location names with relevant context\n\
-                        12. Locations mentioning both 'Swanston Street' and 'Yarra Walk' mean the Princes Bridge instead\n\
-                        13. The 'Bourke Street Pedestrian Bridge' should be the 'Southern Cross Bridge'\n\
-                        14. If there are no clear intersections specified, assume all locations are listed clockwise and create an the intersections like a polygon\n\
-                        Do not include any additional text, explanations, or headers in the output."
-                    },
+                    "role": "system",
+                    "content": "You are a location extraction service for Victorian Government Gazettes. Extract the boundary corner points/intersections forming the designated area polygon following these rules:\n\
+                    1. Return only a list of intersections or landmark points in perimeter order (clockwise or counter-clockwise), one per line.\n\
+                    2. When the text lists boundaries by direction (e.g., 'north to the intersection of X and Y', 'east to the intersection of Y and Z'), extract each intersection: 'Corner of X and Y'.\n\
+                    3. If a street segment is given (e.g. 'bordered by Street A, Street B, Street C'), identify the successive street intersections to form a closed polygon.\n\
+                    4. Always format intersections as: 'Corner of [Street 1] and [Street 2]'.\n\
+                    5. For railway stations: format as '[Name] Railway Station'.\n\
+                    6. Include the specific suburb or locality name on each line if mentioned in the text (e.g., 'Corner of Derrimut Road and Barber Drive, Hoppers Crossing').\n\
+                    7. Do not include extra explanations, bullet points, numbering, or empty lines."
+                },
                 {"role": "user", "content": locations}
             ],
             "temperature": 0.0,

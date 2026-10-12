@@ -89,6 +89,39 @@ where
                 loaded_doc: None,
             };
 
+            // Check if this notice modifies/amends an existing notice
+            if let Ok(Some(target_uri)) = gazette_handler.get_target_amended_gazette_uri().await {
+                let target_hash = format!("flagged:{}", make_hash(&target_uri));
+                let db = DatabaseConnection {
+                    provider: self.config.database_provider.clone(),
+                };
+
+                if let Ok(Some(mut existing_gazette)) = db.fetch_entry(&target_hash).await {
+                    // Apply updated dates if present in the corrigendum
+                    if let Ok(date) = gazette_handler.get_date().await {
+                        existing_gazette.start = Some(date.0);
+                        existing_gazette.end = Some(date.1);
+                    }
+
+                    // Apply updated polygon if new locations/boundaries are provided
+                    if let Ok(Some(polygon)) = gazette_handler.get_polygon().await {
+                        existing_gazette.polygon = Some(polygon);
+                    }
+
+                    // Apply updated image if a new map was included
+                    if let Ok(Some(img)) = gazette_handler.try_upload_image().await {
+                        existing_gazette.img_uri = Some(img);
+                    }
+
+                    let _ = db.create_entry(&target_hash, &existing_gazette).await;
+                }
+
+                // Save the corrigendum notice itself marked as discarded/unflagged to avoid duplicates
+                gazette_handler.gazette.flagged = false;
+                let _ = gazette_handler.save().await;
+                return uri;
+            }
+
             if let Ok(img) = gazette_handler.try_upload_image().await {
                 gazette_handler.gazette.img_uri = img;
             }

@@ -10,6 +10,7 @@ pub trait DatabaseProvider {
     async fn has_entry(&self, id: &str) -> Result<bool>;
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool>;
     async fn fetch_entries(&self) -> Result<Vec<Gazette>>;
+    async fn fetch_entry(&self, id: &str) -> Result<Option<Gazette>>;
 }
 
 pub struct DatabaseConnection<T>
@@ -33,6 +34,10 @@ where
 
     pub async fn fetch_entries(&self) -> Result<Vec<Gazette>> {
         T::fetch_entries(&self.provider).await
+    }
+
+    pub async fn fetch_entry(&self, id: &str) -> Result<Option<Gazette>> {
+        T::fetch_entry(&self.provider, id).await
     }
 }
 

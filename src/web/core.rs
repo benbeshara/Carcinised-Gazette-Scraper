@@ -117,14 +117,14 @@ async fn fetch_polygons<T: DatabaseProvider + Clone>(db_provider: &T) -> String 
 
         for gazette in gazettes {
             if let Some(polygon) = &gazette.polygon {
-                if let Some(end_date) = &gazette.end {
-                    if end_date < &tomorrow {
-                        continue;
-                    }
-                } else {
-                    // If we don't have dates, don't draw a polygon - this is mostly just for local testing
-                    continue;
-                }
+                // if let Some(end_date) = &gazette.end {
+                //     if end_date < &tomorrow {
+                //         continue;
+                //     }
+                // } else {
+                //     // If we don't have dates, don't draw a polygon - this is mostly just for local testing
+                //     continue;
+                // }
 
                 let mut start = String::new();
                 let mut end = String::new();
