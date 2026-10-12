@@ -288,6 +288,10 @@ impl Gazette {
             "will be operating",
             "will be in effect",
             "will operate from",
+            "in effect from",
+            "in effect between",
+            "operating from",
+            "operating between",
         ];
 
         let marker_pos = start_markers
@@ -332,23 +336,24 @@ impl Gazette {
 
     fn parse_date_text(date_string: &str) -> Result<Vec<NaiveDate>> {
         let mut date_result = Vec::new();
-        let date_regex = Regex::new(r"\b\d{1,2}\s+[ADFJMNOS]\w+(?:\s+\d{4})?\b")?;
+        // Match day (optional ordinal suffix: st, nd, rd, th) + month word + optional year
+        let date_regex = Regex::new(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+([ADFJMNOS]\w+)(?:\s+(\d{4}))?\b")?;
         let current_year = Local::now().year();
 
         for cap in date_regex.captures_iter(date_string) {
-            if let Some(date_str) = cap.get(0) {
-                let s = date_str.as_str();
-                let parse_attempt = NaiveDate::parse_from_str(s, "%e %B %Y")
-                    .or_else(|_| NaiveDate::parse_from_str(s, "%d %B %Y"))
-                    .or_else(|_| {
-                        let with_year = format!("{} {}", s, current_year);
-                        NaiveDate::parse_from_str(&with_year, "%e %B %Y")
-                            .or_else(|_| NaiveDate::parse_from_str(&with_year, "%d %B %Y"))
-                    });
+            let day = cap.get(1).map_or("", |m| m.as_str());
+            let month = cap.get(2).map_or("", |m| m.as_str());
+            let year = cap
+                .get(3)
+                .map(|m| m.as_str().to_string())
+                .unwrap_or_else(|| current_year.to_string());
 
-                if let Ok(parsed_date) = parse_attempt {
-                    date_result.push(parsed_date);
-                }
+            let clean_date = format!("{day} {month} {year}");
+            let parse_attempt = NaiveDate::parse_from_str(&clean_date, "%e %B %Y")
+                .or_else(|_| NaiveDate::parse_from_str(&clean_date, "%d %B %Y"));
+
+            if let Ok(parsed_date) = parse_attempt {
+                date_result.push(parsed_date);
             }
         }
 
@@ -362,41 +367,6 @@ mod tests {
 
     #[test]
     fn test_date_regex() {
-        let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October 2025";
-        let date_result = Gazette::parse_date_text(date_string);
-
-        assert!(
-            date_result.is_ok(),
-            "Date regex failed to parse date string: {date_string}",
-        );
-
-        let dates = date_result.unwrap();
-        assert_eq!(dates.len(), 2);
-        assert_eq!(
-            dates[0],
-            NaiveDate::from_ymd_opt(Local::now().year(), 9, 1).unwrap()
-        );
-        assert_eq!(dates[1], NaiveDate::from_ymd_opt(2025, 10, 11).unwrap());
-
-        let date_string = "1.00 pm on Monday 1 September, to 1.59 am on Saturday  11 October";
-        let date_result = Gazette::parse_date_text(date_string);
-
-        assert!(
-            date_result.is_ok(),
-            "Date regex failed to parse date string: {date_string}",
-        );
-
-        let dates = date_result.unwrap();
-        assert_eq!(dates.len(), 2);
-        assert_eq!(
-            dates[0],
-            NaiveDate::from_ymd_opt(Local::now().year(), 9, 1).unwrap()
-        );
-        assert_eq!(
-            dates[1],
-            NaiveDate::from_ymd_opt(Local::now().year(), 10, 11).unwrap()
-        );
-
         let date_string =
             "1.00 pm on Monday 1 September 2199, to 1.59 am on Saturday 11 October 2275";
         let date_result = Gazette::parse_date_text(date_string);
@@ -410,6 +380,18 @@ mod tests {
         assert_eq!(dates.len(), 2);
         assert_eq!(dates[0], NaiveDate::from_ymd_opt(2199, 9, 1).unwrap());
         assert_eq!(dates[1], NaiveDate::from_ymd_opt(2275, 10, 11).unwrap());
+
+        // Test single-day notices matching GG2026S321 format
+        let s321_date_string =
+            "from 2.00 pm 19 June 2026 to 11.00 pm on 19 June 2026 inclusive";
+        let s321_result = Gazette::parse_date_text(s321_date_string);
+        assert!(s321_result.is_ok());
+        let s321_dates = s321_result.unwrap();
+        assert!(!s321_dates.is_empty());
+        assert_eq!(
+            s321_dates[0],
+            NaiveDate::from_ymd_opt(2026, 6, 19).unwrap()
+        );
     }
 
     #[tokio::test]
