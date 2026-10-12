@@ -130,6 +130,30 @@ where
         Ok(String::new())
     }
 
+    fn clean_area_name(area: &str) -> String {
+        let noise_patterns = [
+            r"(?i)\bCentral Business District\b",
+            r"(?i)\bCBD\b",
+            r"(?i)\bShopping Centre\b",
+            r"(?i)\bRailway Station\b",
+            r"(?i)\bTrain Station\b",
+            r"(?i)\bMajor Activity Centre\b",
+            r"(?i)\bActivity Centre\b",
+        ];
+
+        let mut cleaned = area.to_string();
+        for pattern in &noise_patterns {
+            if let Ok(re) = Regex::new(pattern) {
+                cleaned = re.replace_all(&cleaned, "").to_string();
+            }
+        }
+
+        cleaned
+            .trim()
+            .trim_matches(|c: char| c == ',' || c == '-' || c == '–' || c.is_whitespace())
+            .to_string()
+    }
+
     pub(crate) async fn get_polygon(&mut self) -> Result<Option<MapPolygon>> {
         let doc = self.get_or_load_doc().await?;
         let page_text = Self::extract_doc_text(doc)?;
@@ -138,7 +162,8 @@ where
             locations: page_text.clone(),
         };
         let places = loc.parse_locations().await?;
-        let area = Self::get_operation_area(&page_text).await.unwrap_or_default();
+        let raw_area = Self::get_operation_area(&page_text).await.unwrap_or_default();
+        let area = Self::clean_area_name(&raw_area);
         let futures = places.into_iter().map(|place| {
             let area = area.clone();
             let geocoder = self.geocoder.clone();
