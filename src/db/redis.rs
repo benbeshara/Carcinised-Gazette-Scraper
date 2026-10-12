@@ -1,10 +1,8 @@
 use crate::db::DatabaseProvider;
 use crate::utils::gazette::Gazette;
 use anyhow::{anyhow, Result};
-use futures::StreamExt;
 use redis::aio::MultiplexedConnection;
 use redis::AsyncCommands;
-use serde::Serialize;
 
 #[derive(Clone)]
 pub struct RedisProvider {
@@ -65,7 +63,18 @@ impl DatabaseProvider for RedisProvider {
         let discarded_exists =
             Self::check_key_exists(&mut conn, Self::DISCARDED_PREFIX, id).await?;
 
-        Ok(flagged_exists || discarded_exists)
+        let exists = flagged_exists || discarded_exists;
+
+        println!(
+            "{}",
+            if exists {
+                format!("Found entry {id}")
+            } else {
+                format!("Could not find entry {id}")
+            }
+        );
+
+        Ok(exists)
     }
 
     async fn create_entry(&self, id: &str, value: &Gazette) -> Result<bool> {
